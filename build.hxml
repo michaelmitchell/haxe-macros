@@ -1,0 +1,6 @@
+-cp src
+-cp extern
+-main Main
+-js build/application.js
+-cmd node bin/fix_js_maps
+-debug
