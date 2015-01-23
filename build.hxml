@@ -2,5 +2,5 @@
 -cp extern
 -main Main
 -js build/application.js
--cmd node bin/fix_js_maps
+#-cmd node bin/fix_js_maps
 -debug

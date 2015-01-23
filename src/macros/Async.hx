@@ -7,6 +7,19 @@ import haxe.macro.Printer;
 
 class Async {
 
+	/**
+	 *
+	 */
+	var root:Array<Expr>;
+
+	/**
+	 *
+	 */
+	var write:Array<Expr>;
+
+	/**
+	 *
+	 */
     public static function build() {
 		var fields = Context.getBuildFields();
 
@@ -16,7 +29,9 @@ class Async {
 			switch (field.kind) {
 				case FFun(method):
 					if (method.expr != null) {
-						loop(method.expr);
+						var async = new Async();
+
+						method.expr = async.process(method.expr);
 					}
 				default:
 			}
@@ -24,65 +39,87 @@ class Async {
 		
 		return fields;
 	}
-	
-	public static function loop(e:Expr) {
+
+	/**
+	 *
+	 */
+	public function new() {
+		// root block
+		this.root = [];
+
+		// use root as default write block
+		this.write = this.root;
+	}
+
+	/**
+	 *
+	 */
+	public function process(e:Expr) {
 		switch(e.expr) {
-			case EMeta(s, e):
-				if (s.name == 'wait') {
-					//modify(e);
+			// loop through blocks
+			case EBlock(exprs):
+				for (expr in exprs) {
+					process(expr);
 				}
 
 			case EVars(vs):
+				var manipulated = false;
+
 				for (v in vs) {
 					var ve = v.expr;
 
 					if (ve != null) {
 						switch (ve.expr) {
 							case EMeta(s, se):
-								if (s.name == "wait") {
+								if (s.name == 'wait') {
 									switch (se.expr) {
 										case ECall(ce, p):
-											//var method = Context.parse('var a1', e.pos);
+											var method = Context.parse('function(' + v.name + ') {}', e.pos);
 
-											// replace with new block of code
+											p.push(method);
 
-											// clone an expression... convert to string then parse it
-											var exprStr = ExprTools.toString(e),
-												newExpr = Context.parse(exprStr, Context.currentPos());
+											// write new block
+											this.write.push({
+												expr: EBlock([se]),
+												pos: Context.currentPos()
+											});
 
-											e.expr = EBlock([newExpr]);
+											// create write block
+											this.write = [];
 
+											switch (method.expr) {
+												case EFunction(name, fe):
+													// replace new methods block with new write target
+													fe.expr = {
+														expr: EBlock(this.write),
+														pos: Context.currentPos()
+													};
 
+												default:
+											}
+
+											manipulated = true;
 										default:
 									}
 								}
-
 							default:
 						}
 					}
 				}
 
-			case EBlock(exprs):
-				for (expr in exprs) {
-					loop(expr);
+				if (manipulated == false) {
+					this.write.push(e);
 				}
 
+			// unmanipulated expressions
 			default:
-				//trace(e);
+				this.write.push(e);
 		}
+
+		return {
+			expr: EBlock(this.root),
+			pos: e.pos
+		};
 	}
 
-	public static function modify(e:Expr) {
-		switch(e.expr) {
-			case ECall(x, p):
-				var method = Context.parse('function(result:Dynamic) {}', e.pos);
-
-				//p.push(method);
-
-				e.expr = ECall(x, p);
-
-			default:
-		}
-	}
-	
 }

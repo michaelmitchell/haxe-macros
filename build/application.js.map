@@ -1,8 +1,8 @@
 {
 "version":3,
 "file":"application.js",
-"sourceRoot":"/",
-"sources":["src/Main.hx"],
+"sourceRoot":"file://",
+"sources":["/home/michael/Projects/haxe-macros/src/Main.hx"],
 "names":[],
-"mappings":";;YAKc,DAAgB;CAC7B;;;CAEQ;CARR;CAYA,WAAO;;WAGa,KACpB;CAAO;;gBAbT,VADC,IACD,FAYE;;;;"
+"mappings":";;YAIc,DAAgB;CAC7B;;;CAEQ;CAEY,AAAK,AAAzB,iBATA;EAWA,UAAM;EAEc,DAAK,AAAzB,iBAbA;GAeA,SAAM;GAEc,FAAK,AAAzB,kBAEA;YAAM;;;;;WAGc,QACpB;CAAG;;gBArBL,RAoBE;;;;"
 }
