@@ -4,5 +4,5 @@
 "sourceRoot":"file://",
 "sources":["/home/michael/Projects/haxe-macros/src/Main.hx"],
 "names":[],
-"mappings":";;YAIc,DAAgB;CAC7B;;;CAEQ;CAEY,AAAK,AAAzB,iBATA;EAWA,UAAM;EAEc,DAAK,AAAzB,iBAbA;GAeA,SAAM;GAEc,FAAK,AAAzB,kBAEA;YAAM;;;;;WAGc,QACpB;CAAG;;gBArBL,RAoBE;;;;"
+"mappings":";;YAIc,DAAgB;CAC7B;;;CAEQ;CAEa,AAAK,AAA1B,iBATA;EAWA,UAAM;EAEe,DAAK,AAA1B,iBAbA;GAeA,SAAM;GAEe,FAAK,AAA1B,kBAEA;YAAM;;;;;WAGc,QACpB;CAAG;;gBArBL,RAoBE;;;;"
 }

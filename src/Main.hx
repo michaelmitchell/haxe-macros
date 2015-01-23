@@ -2,20 +2,20 @@
 
 class Main {
 
-	@async public static function main() {
+	public static function main() {
 		var a:Int, b:Int, c:Int;
 
 		var d = "something";
 
-		var result1 = @wait foo('Hello');
+		var result1 = @await foo('Hello');
 
 		trace(result1);
 
-		var result2 = @wait foo('bar');
+		var result2 = @await foo('bar');
 
 		trace(result2);
 
-		var result2 = @wait foo('bar');
+		var result2 = @await foo('bar');
 
 		trace(result2);
 	}

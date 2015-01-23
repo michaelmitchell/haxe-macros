@@ -71,7 +71,7 @@ class Async {
 					if (ve != null) {
 						switch (ve.expr) {
 							case EMeta(s, se):
-								if (s.name == 'wait') {
+								if (s.name == 'await') {
 									switch (se.expr) {
 										case ECall(ce, p):
 											var method = Context.parse('function(' + v.name + ') {}', e.pos);
