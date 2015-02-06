@@ -1,27 +1,42 @@
-@:build(macros.Async.build())
+@:build(macros.async.Macro.build())
 
 class Main {
 
 	public static function main() {
-		var a:Int, b:Int, c:Int;
-
-		var d = "something";
-
-		var result1 = @await foo('Hello');
+		var result1 = @await foo('1');
 
 		trace(result1);
 
-		var result2 = @await foo('bar');
+		var result2 = @await foo('2');
 
 		trace(result2);
 
-		var result2 = @await foo('bar');
+		var result3 = @await foo('3');
 
-		trace(result2);
+		trace(result3);
+
+		main2();
 	}
 	
-	@async public static function foo(value:String, ?cb) {
+	public static function main2() {
+		var resulta = @await foo('a');
+
+		trace(resulta);
+
+		var resultb = @await foo('b');
+
+		trace(resultb);
+
+		var resultc = @await foo('c');
+
+		trace(resultc);
+	}
+
+	
+	public static function foo(value:String, ?cb) {
 		cb(value);
+
+		return 1;
 	}
 
 }

@@ -3,4 +3,5 @@
 -main Main
 -js build/application.js
 #-cmd node bin/fix_js_maps
+-cmd node build/application.js
 -debug
