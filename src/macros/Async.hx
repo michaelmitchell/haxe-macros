@@ -27,7 +27,7 @@ class Async {
 
 	var currentVar:Var;
 
-    public static function build() {
+	public static function build() {
 		var fields = Context.getBuildFields();
 			
 		for (field in fields) {
@@ -51,7 +51,7 @@ class Async {
 		return method;
 	}
 
-    public function new(field:Field, method:haxe.macro.Function) {
+	public function new(field:Field, method:haxe.macro.Function) {
 		this.field = field;
 		this.method = method;
 		this.metadata = field.meta;
