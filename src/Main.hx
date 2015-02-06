@@ -1,4 +1,4 @@
-@:build(macros.async.Macro.build())
+@:build(macros.Async.build())
 
 class Main {
 
@@ -14,29 +14,10 @@ class Main {
 		var result3 = @await foo('3');
 
 		trace(result3);
-
-		main2();
 	}
 	
-	public static function main2() {
-		var resulta = @await foo('a');
-
-		trace(resulta);
-
-		var resultb = @await foo('b');
-
-		trace(resultb);
-
-		var resultc = @await foo('c');
-
-		trace(resultc);
-	}
-
-	
-	public static function foo(value:String, ?cb) {
-		cb(value);
-
-		return 1;
+	@async public static function foo(value:String) {
+		return value;
 	}
 
 }
