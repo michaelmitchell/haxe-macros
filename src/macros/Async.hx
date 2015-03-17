@@ -56,13 +56,21 @@ class Async {
 		this.method = method;
 		this.metadata = field.meta;
 
-		trace(this.metadata);
-
 		this.rootExpr = method.expr;
 		this.currentExpr = this.rootExpr;
 
 		this.rootBlock = [];
 		this.currentBlock = this.rootBlock;
+
+		for (metadata in this.metadata) {
+			if (metadata.name == 'async') {
+				this.addCallbackFn();
+			}
+		}
+	}
+
+	public function addCallbackFn() {
+		this.method.args.push({name: 'callback', type: null, opt: true, value: null});
 	}
 
 	public function processBlock(exprs:Array<Expr>) {
