@@ -27,9 +27,9 @@ class Async {
 
 	var currentVar:Var;
 
-	public static function build() {
+	static function build() {
 		var fields = Context.getBuildFields();
-			
+
 		for (field in fields) {
 			switch (field.kind) {
 				case FFun(method):
@@ -43,15 +43,15 @@ class Async {
 		return fields;
 	}
 
-	public static function run(field:Field, method:haxe.macro.Function) {
+	static function run(field:Field, method:haxe.macro.Function) {
 		var instance = new Async(field, method);
 
-		method.expr = instance.process();
+		method.expr = instance.handle();
 
 		return method;
 	}
 
-	public function new(field:Field, method:haxe.macro.Function) {
+	function new(field:Field, method:haxe.macro.Function) {
 		this.field = field;
 		this.method = method;
 		this.metadata = field.meta;
@@ -69,20 +69,20 @@ class Async {
 		}
 	}
 
-	public function addCallbackFn() {
-		this.method.args.push({name: 'callback', type: null, opt: true, value: null});
+	function addCallbackFn() {
+		this.method.args.push({name: 'callback', type: null});
 	}
 
-	public function processBlock(exprs:Array<Expr>) {
+	function handleBlock(exprs:Array<Expr>) {
 		for (expr in exprs) {
 			this.currentExpr = expr;
 
 			switch(expr.expr) {
 				case EBlock(exprs):
-					this.processBlock(exprs);
+					this.handleBlock(exprs);
 
 				case EVars(vars):
-					this.processVars(vars);
+					this.handleVars(vars);
 
 				default:
 					this.append(this.currentExpr);
@@ -90,7 +90,7 @@ class Async {
 		}
 	}
 
-	public function processVars(vars:Array<Var>) {
+	function handleVars(vars:Array<Var>) {
 		for (v in vars) {
 			this.currentVar = v;
 			
@@ -99,7 +99,7 @@ class Async {
 			if (expr != null) {
 				switch (expr.expr) {
 					case EMeta(s, e):
-						this.processMeta(s, e);
+						this.handleMeta(s, e);
 
 					default:
 						this.append(this.currentExpr);
@@ -111,14 +111,14 @@ class Async {
 		}
 	}
 
-	public function processMeta(s, e) {
+	function handleMeta(s, e) {
 		this.currentMetadataEntry = s;
 		this.currentMetadataExpr = e;
 
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e, p):
-					this.processCall(e, p);
+					this.handleCall(e, p);
 
 				default:
 					this.append(this.currentExpr);
@@ -129,7 +129,7 @@ class Async {
 		}
 	}
 
-	public function processCall(ce, p) {
+	function handleCall(ce, p) {
 		var v = this.currentVar,
 			pos = Context.currentPos(),
 			method = Context.parse('function(' + v.name + ') {}', pos);
@@ -160,7 +160,7 @@ class Async {
 		}
 	}
 
-	public function process() {
+	function handle() {
 		var expr = this.rootExpr;
 
 		this.currentExpr = expr;
@@ -168,7 +168,7 @@ class Async {
 		// first expr should be block
 		switch(expr.expr) {
 			case EBlock(exprs):
-				this.processBlock(exprs);
+				this.handleBlock(exprs);
 
 			default:
 				this.append(expr);
@@ -180,7 +180,7 @@ class Async {
 		};
 	}
 
-	public function append(expr:Expr) {
+	function append(expr:Expr) {
 		this.currentBlock.push(expr);
 	}
 
