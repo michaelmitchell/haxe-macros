@@ -24,6 +24,8 @@ class Async {
 
 	var returnType:ComplexType;
 
+	var isCalled:Bool = false;
+
 	static function build() {
 		var fields = Context.getBuildFields();
 
@@ -65,6 +67,8 @@ class Async {
 	}
 
 	function handleBlock(exprs:Array<Expr>) {
+		var i = 0;
+
 		for (expr in exprs) {
 			this.currentExpr = expr;
 
@@ -77,6 +81,26 @@ class Async {
 
 				default:
 					this.append(this.currentExpr);
+			}
+
+			i++;
+
+			// if return has not been used add a callback to the end of the function
+			if (!this.isCalled && i == exprs.length) {
+				var pos = Context.currentPos();
+
+				this.append({
+					expr: ECall({
+						expr: EConst(CIdent(this.callbackName)),
+						pos: pos
+					}, [{
+						expr: EConst(CIdent('null')),
+						pos: pos
+					}]),
+					pos: pos
+				});
+
+				this.isCalled = true;
 			}
 		}
 	}
@@ -95,6 +119,8 @@ class Async {
 			}, e]),
 			pos: pos
 		});
+
+		this.isCalled = true;
 	}
 
 	function handle() {

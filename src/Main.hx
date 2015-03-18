@@ -44,7 +44,6 @@ class Main {
 	}
 
 	@async static function foo4() {
-
 	}
 
 	static function bar(value: String): Promise {
