@@ -3,7 +3,6 @@ package macros;
 import haxe.macro.Context;
 import haxe.macro.Expr;
 import haxe.macro.ExprTools;
-import haxe.macro.Printer;
 
 class Async {
 
@@ -21,11 +20,9 @@ class Async {
 
 	var currentExpr:Expr;
 
-	var currentMetadataEntry:MetadataEntry;
+	var callbackName:String;
 
-	var currentMetadataExpr:Expr;
-
-	var currentVar:Var;
+	var returnType:ComplexType;
 
 	static function build() {
 		var fields = Context.getBuildFields();
@@ -46,7 +43,11 @@ class Async {
 	static function run(field:Field, method:haxe.macro.Function) {
 		var instance = new Async(field, method);
 
-		method.expr = instance.handle();
+		for (metadata in field.meta) {
+			if (metadata.name == 'async') {
+				method.expr = instance.handle();
+			}
+		}
 
 		return method;
 	}
@@ -61,16 +62,6 @@ class Async {
 
 		this.rootBlock = [];
 		this.currentBlock = this.rootBlock;
-
-		for (metadata in this.metadata) {
-			if (metadata.name == 'async') {
-				this.addCallbackFn();
-			}
-		}
-	}
-
-	function addCallbackFn() {
-		this.method.args.push({name: 'callback', type: null});
 	}
 
 	function handleBlock(exprs:Array<Expr>) {
@@ -81,8 +72,8 @@ class Async {
 				case EBlock(exprs):
 					this.handleBlock(exprs);
 
-				case EVars(vars):
-					this.handleVars(vars);
+				case EReturn(e):
+					this.handleReturn(e);
 
 				default:
 					this.append(this.currentExpr);
@@ -90,77 +81,59 @@ class Async {
 		}
 	}
 
-	function handleVars(vars:Array<Var>) {
-		for (v in vars) {
-			this.currentVar = v;
-			
-			var expr = v.expr;
+	function handleReturn(e) {
+		var pos = Context.currentPos();
 
-			if (expr != null) {
-				switch (expr.expr) {
-					case EMeta(s, e):
-						this.handleMeta(s, e);
-
-					default:
-						this.append(this.currentExpr);
-				}
-			}
-			else {
-				this.append(this.currentExpr);
-			}
-		}
-	}
-
-	function handleMeta(s, e) {
-		this.currentMetadataEntry = s;
-		this.currentMetadataExpr = e;
-
-		if (s.name == 'await') {
-			switch (e.expr) {
-				case ECall(e, p):
-					this.handleCall(e, p);
-
-				default:
-					this.append(this.currentExpr);
-			}
-		}
-		else {
-			this.append(this.currentExpr);
-		}
-	}
-
-	function handleCall(ce, p) {
-		var v = this.currentVar,
-			pos = Context.currentPos(),
-			method = Context.parse('function(' + v.name + ') {}', pos);
-
-		p.push(method);
-
-		var e = this.currentMetadataExpr;
-
+		//replace return wtih call to callback function supporting error first callback style
 		this.append({
-			expr: EBlock([e]),
+			expr: ECall({
+				expr: EConst(CIdent(this.callbackName)),
+				pos: pos
+			}, [{
+				expr: EConst(CIdent('null')),
+				pos: pos
+			}, e]),
 			pos: pos
 		});
-
-		// create write block
-		var newBlock = [];
-
-		switch (method.expr) {
-			case EFunction(name, fe):
-				// replace new methods block with new write target
-				fe.expr = {
-					expr: EBlock(newBlock),
-					pos: pos
-				};
-
-				this.currentBlock = newBlock;
-
-			default:
-		}
 	}
 
 	function handle() {
+		var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'.split(''),
+			id = [];
+
+		for (i in 0...12) {
+			id.push(chars[Math.round(Math.random() * chars.length - 1)]);
+		}
+
+		// cache return type to apply to callback value
+		this.returnType = this.method.ret;
+
+		//remove return type requirement
+		this.method.ret = null;
+
+		// create a semi unique callback name to prevent naming conflicts
+		this.callbackName = 'callback_' + id.join('');
+		
+		var type = null;
+
+		// apply return type to callback function for type checking
+		if (this.returnType != null) {
+			type = TFunction([
+					TPath({name: 'Dynamic', pack: []}),
+					this.returnType
+				],
+				TPath({name: 'Void', pack: []})
+			);
+		}
+
+		// add callback to method as last argument
+		this.method.args.push({
+			name: this.callbackName,
+			type: type 
+		});
+
+		//trace(this.method.args[1]);
+
 		var expr = this.rootExpr;
 
 		this.currentExpr = expr;
