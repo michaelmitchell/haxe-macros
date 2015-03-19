@@ -20,6 +20,12 @@ class Await {
 
 	var currentExpr:Expr;
 
+	var currentBinop:Binop;
+	
+	var currentBinopExpr1:Expr;
+
+	var currentBinopExpr2:Expr;
+
 	var currentMetadataEntry:MetadataEntry;
 
 	var currentMetadataExpr:Expr;
@@ -67,6 +73,9 @@ class Await {
 			this.currentExpr = expr;
 
 			switch(expr.expr) {
+				case EBinop(op, e1, e2):
+					this.handleBinop(op, e1, e2);
+
 				case EBlock(exprs):
 					this.handleBlock(exprs);
 
@@ -79,6 +88,36 @@ class Await {
 				default:
 					this.append(this.currentExpr);
 			}
+		}
+	}
+
+	function handleBinop(op, e1, e2) {
+		if (op == OpAssign) {
+			this.currentBinop = op;
+			this.currentBinopExpr1 = e1;
+			this.currentBinopExpr2 = e2;
+
+			var expr = e2.expr;
+
+			if (expr != null) {
+				switch (expr) {
+					case EMeta(s, e):
+						this.handleMeta(s, e);
+
+					default:
+						this.append(this.currentExpr);
+				}
+			}
+			else {
+				this.append(this.currentExpr);
+			}
+
+			this.currentBinop = null;
+			this.currentBinopExpr1 = null;
+			this.currentBinopExpr2 = null;
+		}
+		else {
+			this.append(this.currentExpr);
 		}
 	}
 
@@ -100,6 +139,8 @@ class Await {
 			else {
 				this.append(this.currentExpr);
 			}
+			
+			this.currentVar = null;
 		}
 	}
 
@@ -119,31 +160,50 @@ class Await {
 		else {
 			this.append(this.currentExpr);
 		}
+
+		this.currentMetadataEntry = null;
+		this.currentMetadataExpr = null;
 	}
 
 	function handleCall(ce, p) {
-		var v = this.currentVar,
-			pos = Context.currentPos(),
-			func = 'function(error) {}';
+		var pos = Context.currentPos();
 
-		// use var name if defined
-		if (v != null) {
-			func = 'function(error, ' + v.name + ') {}';
+		this.append({expr: EBlock([this.currentMetadataExpr]), pos: pos});
+
+		// create write block
+		var binopExpr1 = this.currentBinopExpr1,
+			currentVar = this.currentVar,
+			name;
+
+		//work out the name of assignment if any
+		if (binopExpr1 != null) {
+			switch (binopExpr1.expr) {
+				case EConst(c):
+					switch (c) {
+						case CIdent(s):
+							name = s;
+						default:
+					}
+				default:
+			}
 		}
-
-		var method = Context.parse(func, pos);
+		else if (currentVar != null) {
+			name = 'var ' + currentVar.name;
+		}
+		
+		var method = Context.parse('function(error, __result) {}', pos);
 
 		p.push(method);
 
-		var e = this.currentMetadataExpr;
-
-		this.append({
-			expr: EBlock([e]),
-			pos: pos
-		});
-
-		// create write block
+		// the new root block inside the callback function
 		var newBlock = [];
+
+		// add assignment if there is one...
+		if (name != null) {
+			var opAssign =  Context.parse(name + ' = __result', pos);
+
+			newBlock.push(opAssign);
+		}
 
 		switch (method.expr) {
 			case EFunction(name, fe):
@@ -165,7 +225,7 @@ class Await {
 		this.currentExpr = expr;
 
 		// first expr should be block
-		switch(expr.expr) {
+		switch (expr.expr) {
 			case EBlock(exprs):
 				this.handleBlock(exprs);
 

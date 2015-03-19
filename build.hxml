@@ -1,3 +1,4 @@
+-lib continuation
 -cp src
 -cp extern
 -main Main

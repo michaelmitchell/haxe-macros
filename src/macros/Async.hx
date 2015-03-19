@@ -20,8 +20,6 @@ class Async {
 
 	var currentExpr:Expr;
 
-	var callbackName:String;
-
 	var returnType:ComplexType;
 
 	var isCalled:Bool = false;
@@ -67,7 +65,8 @@ class Async {
 	}
 
 	function handleBlock(exprs:Array<Expr>) {
-		var i = 0;
+		var pos = Context.currentPos(),
+			i = 0;
 
 		for (expr in exprs) {
 			this.currentExpr = expr;
@@ -75,6 +74,9 @@ class Async {
 			switch(expr.expr) {
 				case EBlock(exprs):
 					this.handleBlock(exprs);
+
+				case EIf(econd, eif, eelse):
+					this.handleIf(econd, eif, eelse);
 
 				case EReturn(e):
 					this.handleReturn(e);
@@ -85,24 +87,74 @@ class Async {
 
 			i++;
 
-			// if return has not been used add a callback to the end of the function
-			if (!this.isCalled && i == exprs.length) {
-				var pos = Context.currentPos();
-
-				this.append({
-					expr: ECall({
-						expr: EConst(CIdent(this.callbackName)),
+			// make sure we are back on the root block
+			if (this.currentBlock == this.rootBlock) {
+				// if return has not been used add a callback to the end of the function
+				if (!this.isCalled && i == exprs.length) {
+					this.append({
+						expr: ECall({
+							expr: EConst(CIdent('__return')),
+							pos: pos
+						}, [{
+							expr: EConst(CIdent('null')),
+							pos: pos
+						}, {
+							expr: EConst(CIdent('null')),
+							pos: pos
+						}]),
 						pos: pos
-					}, [{
-						expr: EConst(CIdent('null')),
-						pos: pos
-					}]),
-					pos: pos
-				});
+					});
 
-				this.isCalled = true;
+					// prevent callbacks from being called more than once
+					this.append({expr: EReturn(null), pos: pos});
+				}
 			}
 		}
+	}
+
+	function handleIf(econd, eif, eelse) {
+		var pos = Context.currentPos(),
+			currentBlock = this.currentBlock;
+
+		if (eif != null) {
+			var newIfBlock = [];
+
+			this.currentBlock = newIfBlock;
+
+			switch(eif.expr) {
+				case EBlock(exprs):
+					this.handleBlock(exprs);
+
+				default:
+			}
+
+			eif.expr = EBlock(newIfBlock);
+		}
+
+		if (eelse != null) {
+			var newElseBlock = [];
+
+			this.currentBlock = newElseBlock;
+
+			switch(eelse.expr) {
+				case EBlock(exprs):
+					this.handleBlock(exprs);
+
+				default:
+			}
+
+			eelse.expr = EBlock(newElseBlock);
+		}
+
+		// switch back to previous block
+		this.currentBlock = currentBlock;
+
+		var expr = {
+			expr: EIf(econd, eif, eelse),
+			pos: pos
+		};
+
+		this.append(expr);
 	}
 
 	function handleReturn(e) {
@@ -111,7 +163,7 @@ class Async {
 		//replace return wtih call to callback function supporting error first callback style
 		this.append({
 			expr: ECall({
-				expr: EConst(CIdent(this.callbackName)),
+				expr: EConst(CIdent('__return')),
 				pos: pos
 			}, [{
 				expr: EConst(CIdent('null')),
@@ -120,32 +172,27 @@ class Async {
 			pos: pos
 		});
 
-		this.isCalled = true;
+		// prevent callbacks from being called more than once
+		this.append({expr: EReturn(null), pos: pos});
+
+		if (this.currentBlock == this.rootBlock) {
+			this.isCalled = true;
+		}
 	}
 
 	function handle() {
-		var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'.split(''),
-			id = [];
-
-		for (i in 0...12) {
-			id.push(chars[Math.round(Math.random() * chars.length - 1)]);
-		}
-
 		// cache return type to apply to callback value
 		this.returnType = this.method.ret;
 
 		//remove return type requirement
 		this.method.ret = null;
-
-		// create a semi unique callback name to prevent naming conflicts
-		this.callbackName = 'callback_' + id.join('');
 		
 		var type = null;
 
 		// apply return type to callback function for type checking
 		if (this.returnType != null) {
 			type = TFunction([
-					TPath({name: 'Dynamic', pack: []}),
+					TPath({name: null, pack: []}),
 					this.returnType
 				],
 				TPath({name: 'Void', pack: []})
@@ -154,11 +201,9 @@ class Async {
 
 		// add callback to method as last argument
 		this.method.args.push({
-			name: this.callbackName,
+			name: '__return',
 			type: type 
 		});
-
-		//trace(this.method.args[1]);
 
 		var expr = this.rootExpr;
 
