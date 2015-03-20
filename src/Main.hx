@@ -7,19 +7,23 @@ class Main {
 	}
 
 	@async static function foo(value: Int) {
-		var a = 0;
-
-		a = 1;
-
-		@await bar(1);
-
-		if (value == 1) {
-			trace('before');
-			trace('after');
-		}
 	}
 
 	@async static function bar(value: Int) {
+		try {
+			switch (value) {
+				case 1:
+					trace(1);
+					return 1;
+				default:
+					trace(2);
+					return 2;
+			}
+		}
+		catch (e: Dynamic) {
+			return 1;
+		}
+		
 		return 1;
 	}
 

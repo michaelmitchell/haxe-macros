@@ -78,8 +78,20 @@ class Async {
 				case EIf(econd, eif, eelse):
 					this.handleIf(econd, eif, eelse);
 
+				case EFor(it, expr):
+					this.handleFor(it, expr);
+
+				case ESwitch(e, cases, edef):
+					this.handleSwitch(e, cases, edef);
+
 				case EReturn(e):
 					this.handleReturn(e);
+
+				case ETry(e, catches):
+					this.handleTry(e, catches);
+
+				case EWhile(econd, e, normalWhile):
+					this.handleWhile(econd, e, normalWhile);
 
 				default:
 					this.append(this.currentExpr);
@@ -110,6 +122,155 @@ class Async {
 				}
 			}
 		}
+	}
+
+	function handleTry(e, catches: Array<Catch>) {
+		var pos = Context.currentPos(),
+			currentBlock = this.currentBlock;
+
+		if (e != null) {
+			var newBlock = [];
+
+			this.currentBlock = newBlock;
+
+			switch (e.expr) {
+				case EBlock(exprs):
+					this.handleBlock(exprs);
+				default:
+			}
+
+			e.expr = EBlock(newBlock);
+		}
+
+		for (c in catches) {
+			var e = c.expr;
+
+			if (e != null) {
+				var newBlock = [];
+
+				this.currentBlock = newBlock;
+
+				switch (e.expr) {
+					case EBlock(exprs):
+						this.handleBlock(exprs);
+
+					default:
+				}
+
+				e.expr = EBlock(newBlock);
+			}
+		};
+
+		// switch back to previous block
+		this.currentBlock = currentBlock;
+
+		this.append({
+			expr: ETry(e, catches),
+			pos: pos
+		});
+	}
+
+	function handleSwitch(e, cases: Array<Case>, edef) {
+		var pos = Context.currentPos(),
+			currentBlock = this.currentBlock;
+
+		for (c in cases) {
+			var e = c.expr;
+
+			if (e != null) {
+				var newBlock = [];
+
+				this.currentBlock = newBlock;
+
+				switch (e.expr) {
+					case EBlock(exprs):
+						this.handleBlock(exprs);
+
+					default:
+				}
+
+				e.expr = EBlock(newBlock);
+			}
+		};
+
+		if (edef != null) {
+			var newBlock = [];
+
+			this.currentBlock = newBlock;
+
+			switch (edef.expr) {
+				case EBlock(exprs):
+					this.handleBlock(exprs);
+				default:
+			}
+
+			edef.expr = EBlock(newBlock);
+		}
+		
+		// switch back to previous block
+		this.currentBlock = currentBlock;
+
+		this.append({
+			expr: ESwitch(e, cases, edef),
+			pos: pos
+		});
+	}
+
+	function handleWhile(econd, e, normalWhile) {
+		var pos = Context.currentPos(),
+			currentBlock = this.currentBlock;
+
+		if (e != null) {
+			var newBlock = [];
+
+			this.currentBlock = newBlock;
+
+			switch (e.expr) {
+				case EBlock(exprs):
+					this.handleBlock(exprs);
+
+				default:
+			}
+
+			e.expr = EBlock(newBlock);
+		}
+	
+		// switch back to previous block
+		this.currentBlock = currentBlock;
+
+		this.append({
+			expr: EWhile(econd, e, normalWhile),
+			pos: pos
+		});
+	}
+
+	function handleFor(it, expr) {
+		var pos = Context.currentPos(),
+			currentBlock = this.currentBlock;
+
+		if (expr != null) {
+			var newBlock = [];
+
+			this.currentBlock = newBlock;
+
+			switch (expr.expr) {
+				case EBlock(exprs):
+					this.handleBlock(exprs);
+
+				default:
+			}
+
+			expr.expr = EBlock(newBlock);
+		}
+	
+		// switch back to previous block
+		this.currentBlock = currentBlock;
+
+		this.append({
+			expr: EFor(it, expr),
+			pos: pos
+		});
+
 	}
 
 	function handleIf(econd, eif, eelse) {
@@ -149,12 +310,10 @@ class Async {
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		var expr = {
+		this.append({
 			expr: EIf(econd, eif, eelse),
 			pos: pos
-		};
-
-		this.append(expr);
+		});
 	}
 
 	function handleReturn(e) {
