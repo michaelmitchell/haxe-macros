@@ -22,7 +22,7 @@ class Async {
 
 	var returnType:ComplexType;
 
-	var isCalled:Bool = false;
+	var isReturned:Bool = false;
 
 	static function build() {
 		var fields = Context.getBuildFields();
@@ -65,8 +65,7 @@ class Async {
 	}
 
 	function handleBlock(exprs:Array<Expr>) {
-		var pos = Context.currentPos(),
-			i = 0;
+		var i = 0;
 
 		for (expr in exprs) {
 			this.currentExpr = expr;
@@ -83,6 +82,9 @@ class Async {
 
 				case ESwitch(e, cases, edef):
 					this.handleSwitch(e, cases, edef);
+
+				case EThrow(e):
+					this.handleThrow(e);
 
 				case EReturn(e):
 					this.handleReturn(e);
@@ -102,31 +104,32 @@ class Async {
 			// make sure we are back on the root block
 			if (this.currentBlock == this.rootBlock) {
 				// if return has not been used add a callback to the end of the function
-				if (!this.isCalled && i == exprs.length) {
+				if (!this.isReturned && i == exprs.length) {
 					this.append({
 						expr: ECall({
 							expr: EConst(CIdent('__return')),
-							pos: pos
+							pos: expr.pos
 						}, [{
 							expr: EConst(CIdent('null')),
-							pos: pos
+							pos: expr.pos
 						}, {
 							expr: EConst(CIdent('null')),
-							pos: pos
+							pos: expr.pos
 						}]),
-						pos: pos
+						pos: expr.pos
 					});
 
 					// prevent callbacks from being called more than once
-					this.append({expr: EReturn(null), pos: pos});
+					this.append({expr: EReturn(null), pos: expr.pos});
 				}
 			}
 		}
+
+		this.isReturned = false;
 	}
 
 	function handleTry(e, catches: Array<Catch>) {
-		var pos = Context.currentPos(),
-			currentBlock = this.currentBlock;
+		var currentBlock = this.currentBlock;
 
 		if (e != null) {
 			var newBlock = [];
@@ -166,13 +169,12 @@ class Async {
 
 		this.append({
 			expr: ETry(e, catches),
-			pos: pos
+			pos: e.pos
 		});
 	}
 
 	function handleSwitch(e, cases: Array<Case>, edef) {
-		var pos = Context.currentPos(),
-			currentBlock = this.currentBlock;
+		var currentBlock = this.currentBlock;
 
 		for (c in cases) {
 			var e = c.expr;
@@ -201,6 +203,7 @@ class Async {
 			switch (edef.expr) {
 				case EBlock(exprs):
 					this.handleBlock(exprs);
+
 				default:
 			}
 
@@ -212,13 +215,12 @@ class Async {
 
 		this.append({
 			expr: ESwitch(e, cases, edef),
-			pos: pos
+			pos: e.pos
 		});
 	}
 
 	function handleWhile(econd, e, normalWhile) {
-		var pos = Context.currentPos(),
-			currentBlock = this.currentBlock;
+		var currentBlock = this.currentBlock;
 
 		if (e != null) {
 			var newBlock = [];
@@ -240,13 +242,12 @@ class Async {
 
 		this.append({
 			expr: EWhile(econd, e, normalWhile),
-			pos: pos
+			pos: econd.pos
 		});
 	}
 
 	function handleFor(it, expr) {
-		var pos = Context.currentPos(),
-			currentBlock = this.currentBlock;
+		var currentBlock = this.currentBlock;
 
 		if (expr != null) {
 			var newBlock = [];
@@ -268,14 +269,13 @@ class Async {
 
 		this.append({
 			expr: EFor(it, expr),
-			pos: pos
+			pos: it.pos
 		});
 
 	}
 
 	function handleIf(econd, eif, eelse) {
-		var pos = Context.currentPos(),
-			currentBlock = this.currentBlock;
+		var currentBlock = this.currentBlock;
 
 		if (eif != null) {
 			var newIfBlock = [];
@@ -312,30 +312,55 @@ class Async {
 
 		this.append({
 			expr: EIf(econd, eif, eelse),
-			pos: pos
+			pos: econd.pos
 		});
 	}
 
+	function handleThrow(e) {
+		if (!this.isReturned) {
+			//replace return wtih call to callback function supporting error first callback style
+			this.append({
+				expr: ECall({
+					expr: EConst(CIdent('__return')),
+					pos: e.pos
+				}, [e, {
+					expr: EConst(CIdent('null')),
+					pos: e.pos
+				}]),
+				pos: e.pos
+			});
+
+			// prevent callbacks from being called more than once
+			this.append({expr: EReturn(null), pos: e.pos});
+
+			this.isReturned = true;
+		}
+		else {
+			Context.error('Unreachable callback', e.pos);
+		}
+	}
+
 	function handleReturn(e) {
-		var pos = Context.currentPos();
+		if (!this.isReturned) {
+			//replace return wtih call to callback function supporting error first callback style
+			this.append({
+				expr: ECall({
+					expr: EConst(CIdent('__return')),
+					pos: e.pos
+				}, [{
+					expr: EConst(CIdent('null')),
+					pos: e.pos
+				}, e]),
+				pos: e.pos
+			});
 
-		//replace return wtih call to callback function supporting error first callback style
-		this.append({
-			expr: ECall({
-				expr: EConst(CIdent('__return')),
-				pos: pos
-			}, [{
-				expr: EConst(CIdent('null')),
-				pos: pos
-			}, e]),
-			pos: pos
-		});
+			// prevent callbacks from being called more than once
+			this.append({expr: EReturn(null), pos: e.pos});
 
-		// prevent callbacks from being called more than once
-		this.append({expr: EReturn(null), pos: pos});
-
-		if (this.currentBlock == this.rootBlock) {
-			this.isCalled = true;
+			this.isReturned = true;
+		}
+		else {
+			Context.error('Unreachable callback', e.pos);
 		}
 	}
 
@@ -379,7 +404,7 @@ class Async {
 
 		return {
 			expr: EBlock(this.rootBlock),
-			pos: Context.currentPos()
+			pos: expr.pos
 		};
 	}
 

@@ -4,27 +4,37 @@
 class Main {
 
 	static function main() {
-	}
+		trace(0);
 
-	@async static function foo(value: Int) {
-	}
-
-	@async static function bar(value: Int) {
-		try {
-			switch (value) {
-				case 1:
-					trace(1);
-					return 1;
-				default:
-					trace(2);
-					return 2;
-			}
-		}
-		catch (e: Dynamic) {
-			return 1;
-		}
-		
 		return 1;
+
+		trace(1);
+
+		var b = 1;
+
+	}
+
+	@async function foo(i: Int) {
+		if (i == 1) {
+			throw new Error('This is an error');
+		}
+		else {
+			throw new AnotherError('another error');
+		}
+
+		return i;
 	}
 
 }
+
+class Error {
+
+	var message: String;
+	
+	public function new(m: String) {
+		this.message = m;
+	}
+
+}
+
+class AnotherError extends Error {}
