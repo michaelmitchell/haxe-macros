@@ -1,25 +1,44 @@
+/**
+import com.dongxiguo.continuation.Continuation;
+
+@:build(com.dongxiguo.continuation.Continuation.cpsByMeta("async"))
+/**/
+
+/**/
 @:build(macros.Async.build())
 @:build(macros.Await.build())
+/**/
 
 class Main {
 
 	static function main() {
-		trace(0);
-
-		return 1;
-
-		trace(1);
-
-		var b = 1;
-
 	}
 
-	@async function foo(i: Int) {
+	@async public static function foo(i: Int) {
 		if (i == 1) {
-			throw new Error('This is an error');
+			trace('before');
+
+			@await foo(1);
+
+			trace('after');
+
+			return 1;
 		}
 		else {
-			throw new AnotherError('another error');
+			return 2;
+		}
+
+		trace(i);
+
+		if (i == 2) {
+			trace('before');
+
+			@await foo(2);
+
+			trace('after');
+		}
+		else {
+			return 3;
 		}
 
 		return i;
@@ -36,5 +55,3 @@ class Error {
 	}
 
 }
-
-class AnotherError extends Error {}

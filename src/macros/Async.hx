@@ -24,6 +24,8 @@ class Async {
 
 	var isReturned:Bool = false;
 
+	var isInTry:Bool = false;
+
 	static function build() {
 		var fields = Context.getBuildFields();
 
@@ -132,6 +134,8 @@ class Async {
 		var currentBlock = this.currentBlock;
 
 		if (e != null) {
+			this.isInTry = true;
+
 			var newBlock = [];
 
 			this.currentBlock = newBlock;
@@ -143,6 +147,8 @@ class Async {
 			}
 
 			e.expr = EBlock(newBlock);
+
+			this.isInTry = false;
 		}
 
 		for (c in catches) {
@@ -274,7 +280,7 @@ class Async {
 
 	}
 
-	function handleIf(econd, eif, eelse) {
+	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
 		var currentBlock = this.currentBlock;
 
 		if (eif != null) {
@@ -301,9 +307,12 @@ class Async {
 				case EBlock(exprs):
 					this.handleBlock(exprs);
 
+				case EIf(econd, eif, eelse):
+					this.handleIf(econd, eif, eelse);
+
 				default:
 			}
-
+			
 			eelse.expr = EBlock(newElseBlock);
 		}
 
@@ -317,26 +326,32 @@ class Async {
 	}
 
 	function handleThrow(e) {
-		if (!this.isReturned) {
-			//replace return wtih call to callback function supporting error first callback style
-			this.append({
-				expr: ECall({
-					expr: EConst(CIdent('__return')),
+		//don't replace throw with callback if it is inside a try blcok
+		if (!this.isInTry) {
+			if (!this.isReturned) {
+				//replace return wtih call to callback function supporting error first callback style
+				this.append({
+					expr: ECall({
+						expr: EConst(CIdent('__return')),
+						pos: e.pos
+					}, [e, {
+						expr: EConst(CIdent('null')),
+						pos: e.pos
+					}]),
 					pos: e.pos
-				}, [e, {
-					expr: EConst(CIdent('null')),
-					pos: e.pos
-				}]),
-				pos: e.pos
-			});
+				});
 
-			// prevent callbacks from being called more than once
-			this.append({expr: EReturn(null), pos: e.pos});
+				// prevent callbacks from being called more than once
+				this.append({expr: EReturn(null), pos: e.pos});
 
-			this.isReturned = true;
+				this.isReturned = true;
+			}
+			else {
+				Context.error('Unreachable callback', e.pos);
+			}
 		}
 		else {
-			Context.error('Unreachable callback', e.pos);
+			this.append(this.currentExpr);
 		}
 	}
 

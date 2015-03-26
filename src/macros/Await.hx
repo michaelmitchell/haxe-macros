@@ -32,6 +32,10 @@ class Await {
 
 	var currentVar:Var;
 
+	var wasCalled:Bool = false;
+
+	var isInIf:Bool = false;
+
 	static function build() {
 		var fields = Context.getBuildFields();
 
@@ -79,16 +83,156 @@ class Await {
 				case EBlock(exprs):
 					this.handleBlock(exprs);
 
-				case EVars(vars):
-					this.handleVars(vars);
+				case EIf(econd, eif, eelse):
+					this.handleIf(econd, eif, eelse);
 
 				case EMeta(s, e):
 					this.handleMeta(s, e);
+
+				case ETry(e, catches):
+					this.handleTry(e, catches);
+
+				case EVars(vars):
+					this.handleVars(vars);
 
 				default:
 					this.append(this.currentExpr);
 			}
 		}
+	}
+
+	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
+		var currentBlock = this.currentBlock,
+			isInIf = this.isInIf;
+	
+		this.isInIf = true;
+		this.wasCalled = false;
+
+		if (eif != null) {
+			var newIfBlock = [];
+
+			this.currentBlock = newIfBlock;
+
+			switch(eif.expr) {
+				case EBlock(exprs):
+					this.handleBlock(exprs);
+
+				default:
+			}
+
+			eif.expr = EBlock(newIfBlock);
+		}
+
+		if (eelse != null) {
+			var newElseBlock = [];
+
+			this.currentBlock = newElseBlock;
+
+			switch(eelse.expr) {
+				case EBlock(exprs):
+					this.handleBlock(exprs);
+
+				case EIf(econd, eif, eelse):
+					this.handleIf(econd, eif, eelse);
+
+				default:
+			}
+
+			eelse.expr = EBlock(newElseBlock);
+		}
+
+		// switch back to previous block
+		this.currentBlock = currentBlock;
+
+		var method;
+
+		// only add the "after if" callback if there was an async call made within the if statement
+		if (this.wasCalled && !isInIf) {
+			method = Context.parse('var __if = function() {}', econd.pos);
+
+			this.append(method);
+		}
+
+		this.append({
+			expr: EIf(econd, eif, eelse),
+			pos: econd.pos
+		});
+
+		if (this.wasCalled && !isInIf) {
+			// the new root block inside the callback function
+			var newBlock = [];
+			
+			switch (method.expr) {
+				case EVars(vars):
+					for (v in vars) {
+						var expr = v.expr;
+
+						switch (expr.expr) {
+							case EFunction(name, fe):
+								// replace new methods block with new write target
+								fe.expr = {
+									expr: EBlock(newBlock),
+									pos: econd.pos
+								};
+
+
+							default:
+						}
+					}
+
+				default:
+			}
+
+			// shift current block to new "after if" callback
+			this.currentBlock = newBlock;
+		}
+
+		this.isInIf = false;
+	}
+
+	function handleTry(e, catches: Array<Catch>) {
+		var currentBlock = this.currentBlock;
+
+		if (e != null) {
+			var newBlock = [];
+
+			this.currentBlock = newBlock;
+
+			switch (e.expr) {
+				case EBlock(exprs):
+					this.handleBlock(exprs);
+				default:
+			}
+
+			e.expr = EBlock(newBlock);
+		}
+
+		for (c in catches) {
+			var e = c.expr;
+
+			if (e != null) {
+				var newBlock = [];
+
+				this.currentBlock = newBlock;
+
+				switch (e.expr) {
+					case EBlock(exprs):
+						this.handleBlock(exprs);
+
+					default:
+				}
+
+				e.expr = EBlock(newBlock);
+			}
+		};
+
+		// switch back to previous block
+		this.currentBlock = currentBlock;
+
+		this.append({
+			expr: ETry(e, catches),
+			pos: e.pos
+		});
 	}
 
 	function handleBinop(op, e1, e2) {
@@ -151,6 +295,8 @@ class Await {
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e, p):
+					this.wasCalled = true;
+
 					this.handleCall(e, p);
 
 				default:
