@@ -15,21 +15,6 @@ class Main {
 	}
 
 	@async public static function foo(i: Int) {
-		if (i == 1) {
-			trace('before');
-
-			@await foo(1);
-
-			trace('after');
-
-			return 1;
-		}
-		else {
-			return 2;
-		}
-
-		trace(i);
-
 		if (i == 2) {
 			trace('before');
 
@@ -37,11 +22,21 @@ class Main {
 
 			trace('after');
 		}
+		else if(i ==3) {
+			trace('here');
+
+		}
 		else {
+			trace('there');
+
 			return 3;
 		}
 
 		return i;
+	}
+
+	static function bar() {
+
 	}
 
 }

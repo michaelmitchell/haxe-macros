@@ -106,7 +106,10 @@ class Await {
 			isInIf = this.isInIf;
 	
 		this.isInIf = true;
-		this.wasCalled = false;
+
+		if (!isInIf) {
+			this.wasCalled = false;
+		}
 
 		if (eif != null) {
 			var newIfBlock = [];
@@ -118,6 +121,17 @@ class Await {
 					this.handleBlock(exprs);
 
 				default:
+			}
+
+			var lastExpr = this.currentBlock[this.currentBlock.length - 1];
+
+			switch (lastExpr.expr) {
+				case EReturn(e):
+					// don't add a call to continue if already returned...
+				default:
+					var call = Context.parse('__if()', econd.pos);
+
+					this.currentBlock.push(call);
 			}
 
 			eif.expr = EBlock(newIfBlock);
@@ -136,6 +150,19 @@ class Await {
 					this.handleIf(econd, eif, eelse);
 
 				default:
+			}
+
+			if (this.isInIf) {
+				var lastExpr = this.currentBlock[this.currentBlock.length - 1];
+
+				switch (lastExpr.expr) {
+					case EReturn(e):
+						// don't add a call to continue if already returned...
+					default:
+						var call = Context.parse('__if()', econd.pos);
+
+						this.currentBlock.push(call);
+				}
 			}
 
 			eelse.expr = EBlock(newElseBlock);
