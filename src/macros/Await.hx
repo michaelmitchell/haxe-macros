@@ -111,6 +111,8 @@ class Await {
 			this.wasCalled = false;
 		}
 
+		var blocks = [];
+
 		if (eif != null) {
 			var newIfBlock = [];
 
@@ -123,16 +125,7 @@ class Await {
 				default:
 			}
 
-			var lastExpr = this.currentBlock[this.currentBlock.length - 1];
-
-			switch (lastExpr.expr) {
-				case EReturn(e):
-					// don't add a call to continue if already returned...
-				default:
-					var call = Context.parse('__if()', econd.pos);
-
-					this.currentBlock.push(call);
-			}
+			blocks.push(this.currentBlock);
 
 			eif.expr = EBlock(newIfBlock);
 		}
@@ -153,16 +146,7 @@ class Await {
 			}
 
 			if (this.isInIf) {
-				var lastExpr = this.currentBlock[this.currentBlock.length - 1];
-
-				switch (lastExpr.expr) {
-					case EReturn(e):
-						// don't add a call to continue if already returned...
-					default:
-						var call = Context.parse('__if()', econd.pos);
-
-						this.currentBlock.push(call);
-				}
+				blocks.push(this.currentBlock);
 			}
 
 			eelse.expr = EBlock(newElseBlock);
@@ -174,10 +158,33 @@ class Await {
 		var method;
 
 		// only add the "after if" callback if there was an async call made within the if statement
-		if (this.wasCalled && !isInIf) {
-			method = Context.parse('var __if = function() {}', econd.pos);
+		if (this.wasCalled) {
+			if (!isInIf) {	
+				method = Context.parse('var __continue = function() {}', econd.pos);
 
-			this.append(method);
+				this.append(method);
+			}
+
+			// add calls to __continue where needed
+			for (block in blocks) {
+				var lastExpr = block[block.length - 1];
+
+				if (lastExpr != null) {
+					switch (lastExpr.expr) {
+						case EReturn(e):
+							// don't add a call to continue if already returned...
+						default:
+							var call = Context.parse('__continue()', econd.pos);
+
+							block.push(call);
+					}	
+				}
+				else {
+					var call = Context.parse('__continue()', econd.pos);
+
+					block.push(call);
+				}
+			}
 		}
 
 		this.append({
@@ -364,7 +371,7 @@ class Await {
 			name = 'var ' + currentVar.name;
 		}
 		
-		var method = Context.parse('function(error, __result) {}', pos);
+		var method = Context.parse('function(__error, __result) {}', pos);
 
 		p.push(method);
 

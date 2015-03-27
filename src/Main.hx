@@ -18,18 +18,45 @@ class Main {
 		if (i == 2) {
 			trace('before');
 
-			@await foo(2);
-
 			trace('after');
 		}
-		else if(i ==3) {
+		else if(i == 3) {
 			trace('here');
+
+			trace('there');
 
 		}
 		else {
 			trace('there');
 
-			return 3;
+			@await foo(1);
+
+			if (i == 4) {
+				trace('before');
+
+				@await foo(4);
+
+				trace('after');
+			}
+			else {
+				trace('banana');
+			}
+		}
+
+		if (i == 10) {
+			trace(1);
+
+			@await foo(10);
+
+			trace(2);
+		}
+		else if (i == 20) {
+			trace(3);
+			trace(4);
+		}
+		else {
+			trace(5);
+			trace(6);
 		}
 
 		return i;
