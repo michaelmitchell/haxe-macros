@@ -17,7 +17,7 @@ class Main {
 
 	}
 
-	@:async public static function foo(i: Int) {
+	public static function foo(i: Int) {
 		var arr = [0,1,2,3,4,5,6,7,8,9];
 
 		for (v in arr) {
@@ -45,8 +45,8 @@ class Main {
 		}
 	}
 
-	static function bar() {
-
+	@async static function bar(i: Int) {
+		return i;
 	}
 
 }

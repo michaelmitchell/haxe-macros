@@ -130,6 +130,55 @@ class Await {
 		}
 	}
 
+	function handleFor(it, expr) {
+		switch(it.expr) {
+			case EIn(e1, e2): {
+				var name = switch (e1.expr) {
+					case EConst(c): {
+						switch (c) {
+							case CIdent(s): {
+								s;
+							}
+							default: {
+								Context.error("Expect identify before \"in\".", e1.pos);
+							}
+						}
+					}
+					default: {
+						Context.error("Expect identify before \"in\".", e1.pos);
+					}
+				}
+
+				var toIteratorExpr = {
+					expr: ECall(macro macros.Await.toIterator, [e2]),
+					pos: it.pos
+				};
+
+				var hasNextExpr = {
+					expr: ECall(macro macros.Await.hasNext, [e2]),
+					pos: it.pos
+				};
+
+				var nextExpr = {
+					expr: ECall(macro macros.Await.next, [e2]),
+					pos: it.pos
+				};
+
+				var expr = macro {
+					var __iterator = $toIteratorExpr;
+					while ($hasNextExpr) {
+						var $name = $nextExpr;
+						$expr;
+					}
+				};
+
+				this.handleExpr(expr);
+			}
+
+			default:
+		}
+	}
+
 	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
 		var currentBlock = this.currentBlock,
 			isInIf = this.isInIf;
@@ -190,8 +239,8 @@ class Await {
 		// only add the "after if" callback if there was an async call made within the if statement
 		if (isCalled) {
 			if (!isInIf) {	
-				method = Context.parse('var __continue = function() {}', econd.pos);
-
+				method = macro var __continue = function () {};
+				
 				this.appendExpr(method);
 			}
 
@@ -204,15 +253,11 @@ class Await {
 						case EReturn(e):
 							// don't add a call to continue if already returned...
 						default:
-							var call = Context.parse('__continue()', econd.pos);
-
-							block.push(call);
+							block.push(macro __continue());
 					}	
 				}
 				else {
-					var call = Context.parse('__continue()', econd.pos);
-
-					block.push(call);
+					block.push(macro __continue());
 				}
 			}
 		}
@@ -401,7 +446,7 @@ class Await {
 			name = 'var ' + currentVar.name;
 		}
 		
-		var method = Context.parse('function(__error, __result) {}', pos);
+		var method = macro function(__error, __result) {};
 
 		p.push(method);
 
@@ -431,54 +476,6 @@ class Await {
 
 	function appendExpr(expr:Expr) {
 		this.currentBlock.push(expr);
-	}
-
-	function handleFor(it, expr) {
-		switch(it.expr) {
-			case EIn(e1, e2):
-				var name = switch (e1.expr) {
-					case EConst(c): {
-						switch (c) {
-							case CIdent(s): {
-								s;
-							}
-							default: {
-								Context.error("Expect identify before \"in\".", e1.pos);
-							}
-						}
-					}
-					default: {
-						Context.error("Expect identify before \"in\".", e1.pos);
-					}
-				}
-
-				var toIteratorExpr = {
-					expr: ECall(macro macros.Await.toIterator, [e2]),
-					pos: it.pos
-				};
-
-				var hasNextExpr = {
-					expr: ECall(macro macros.Await.hasNext, [e2]),
-					pos: it.pos
-				};
-
-				var nextExpr = {
-					expr: ECall(macro macros.Await.next, [e2]),
-					pos: it.pos
-				};
-
-				var expr = macro {
-					var __iterator = $toIteratorExpr;
-					while ($hasNextExpr) {
-						var $name = $nextExpr;
-						$expr;
-					}
-				};
-
-				this.appendExpr(expr);
-			
-			default:
-		}
 	}
 
 	static function hasArrayAccess(type: AbstractType): Bool {

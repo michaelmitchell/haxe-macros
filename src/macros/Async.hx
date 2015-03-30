@@ -388,6 +388,7 @@ class Async {
 		
 		var type = null;
 
+		//@TODO Fix this?
 		// apply return type to callback function for type checking
 		if (this.returnType != null) {
 			type = TFunction([
