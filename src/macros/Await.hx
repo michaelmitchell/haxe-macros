@@ -1,21 +1,14 @@
 package macros;
 
+#if macro
 import haxe.macro.Context;
 import haxe.macro.Expr;
 import haxe.macro.ExprTools;
+import haxe.macro.Type;
+#end
 
 class Await {
-
-	var field:Field;
-
-	var method:Function;
-
-	var metadata:Metadata;
-
-	var rootExpr:Expr;
-
-	var rootBlock:Array<Expr>;
-
+	#if macro
 	var currentBlock:Array<Expr>;
 
 	var currentExpr:Expr;
@@ -32,18 +25,26 @@ class Await {
 
 	var currentVar:Var;
 
-	var wasCalled:Bool = false;
+	var field:Field;
+
+	var isCalled:Bool = false;
 
 	var isInIf:Bool = false;
 
-	static function build() {
+	var method:Function;
+
+	var rootExpr:Expr;
+
+	var rootBlock:Array<Expr>;
+
+	public static function build() {
 		var fields = Context.getBuildFields();
 
 		for (field in fields) {
 			switch (field.kind) {
 				case FFun(method):
 					if (method.expr != null) {
-						method = Await.run(field, method);
+						method = Await.transform(field, method);
 					}
 				default:
 			}
@@ -52,10 +53,10 @@ class Await {
 		return fields;
 	}
 
-	static function run(field:Field, method:haxe.macro.Function) {
+	static function transform(field:Field, method:haxe.macro.Function) {
 		var instance = new Await(field, method);
 
-		method.expr = instance.handle();
+		method.expr = instance.handleRootExpr();
 
 		return method;
 	}
@@ -63,7 +64,6 @@ class Await {
 	function new(field:Field, method:haxe.macro.Function) {
 		this.field = field;
 		this.method = method;
-		this.metadata = field.meta;
 
 		this.rootExpr = method.expr;
 		this.currentExpr = this.rootExpr;
@@ -72,32 +72,61 @@ class Await {
 		this.currentBlock = this.rootBlock;
 	}
 
+	function handleRootExpr() {
+		var expr = this.rootExpr;
+
+		this.currentExpr = expr;
+
+		// first expr should be block
+		switch (expr.expr) {
+			case EBlock(exprs):
+				this.handleBlock(exprs);
+
+			default:
+				this.appendExpr(expr);
+		}
+
+		return {
+			expr: EBlock(this.rootBlock),
+			pos: expr.pos
+		};
+	}
+
+	function handleExpr(expr: Expr) {
+		this.currentExpr = expr;
+
+		switch(expr.expr) {
+			case EBinop(op, e1, e2):
+				this.handleBinop(op, e1, e2);
+
+			case EBlock(exprs):
+				this.handleBlock(exprs);
+
+			case EFor(it, expr):
+				this.handleFor(it, expr);
+
+			case EIf(econd, eif, eelse):
+				this.handleIf(econd, eif, eelse);
+
+			case EMeta(s, e):
+				this.handleMeta(s, e);
+
+			case ETry(e, catches):
+				this.handleTry(e, catches);
+
+			case EVars(vars):
+				this.handleVars(vars);
+
+			default:
+				this.appendExpr(this.currentExpr);
+		}
+
+		this.currentExpr = null;
+	}
+
 	function handleBlock(exprs:Array<Expr>) {
 		for (expr in exprs) {
-			this.currentExpr = expr;
-
-			switch(expr.expr) {
-				case EBinop(op, e1, e2):
-					this.handleBinop(op, e1, e2);
-
-				case EBlock(exprs):
-					this.handleBlock(exprs);
-
-				case EIf(econd, eif, eelse):
-					this.handleIf(econd, eif, eelse);
-
-				case EMeta(s, e):
-					this.handleMeta(s, e);
-
-				case ETry(e, catches):
-					this.handleTry(e, catches);
-
-				case EVars(vars):
-					this.handleVars(vars);
-
-				default:
-					this.append(this.currentExpr);
-			}
+			this.handleExpr(expr);
 		}
 	}
 
@@ -108,7 +137,7 @@ class Await {
 		this.isInIf = true;
 
 		if (!isInIf) {
-			this.wasCalled = false;
+			this.isCalled = false;
 		}
 
 		var blocks = [];
@@ -155,14 +184,15 @@ class Await {
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		var method;
+		var isCalled = this.isCalled,
+			method;
 
 		// only add the "after if" callback if there was an async call made within the if statement
-		if (this.wasCalled) {
+		if (isCalled) {
 			if (!isInIf) {	
 				method = Context.parse('var __continue = function() {}', econd.pos);
 
-				this.append(method);
+				this.appendExpr(method);
 			}
 
 			// add calls to __continue where needed
@@ -187,12 +217,12 @@ class Await {
 			}
 		}
 
-		this.append({
+		this.appendExpr({
 			expr: EIf(econd, eif, eelse),
 			pos: econd.pos
 		});
 
-		if (this.wasCalled && !isInIf) {
+		if (isCalled && !isInIf) {
 			// the new root block inside the callback function
 			var newBlock = [];
 			
@@ -263,7 +293,7 @@ class Await {
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		this.append({
+		this.appendExpr({
 			expr: ETry(e, catches),
 			pos: e.pos
 		});
@@ -283,11 +313,11 @@ class Await {
 						this.handleMeta(s, e);
 
 					default:
-						this.append(this.currentExpr);
+						this.appendExpr(this.currentExpr);
 				}
 			}
 			else {
-				this.append(this.currentExpr);
+				this.appendExpr(this.currentExpr);
 			}
 
 			this.currentBinop = null;
@@ -295,7 +325,7 @@ class Await {
 			this.currentBinopExpr2 = null;
 		}
 		else {
-			this.append(this.currentExpr);
+			this.appendExpr(this.currentExpr);
 		}
 	}
 
@@ -311,11 +341,11 @@ class Await {
 						this.handleMeta(s, e);
 
 					default:
-						this.append(this.currentExpr);
+						this.appendExpr(this.currentExpr);
 				}
 			}
 			else {
-				this.append(this.currentExpr);
+				this.appendExpr(this.currentExpr);
 			}
 			
 			this.currentVar = null;
@@ -329,16 +359,16 @@ class Await {
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e, p):
-					this.wasCalled = true;
+					this.isCalled = true;
 
 					this.handleCall(e, p);
 
 				default:
-					this.append(this.currentExpr);
+					this.appendExpr(this.currentExpr);
 			}
 		}
 		else {
-			this.append(this.currentExpr);
+			this.appendExpr(this.currentExpr);
 		}
 
 		this.currentMetadataEntry = null;
@@ -346,9 +376,9 @@ class Await {
 	}
 
 	function handleCall(ce, p) {
-		var pos = Context.currentPos();
+		var pos = ce.pos;
 
-		this.append({expr: EBlock([this.currentMetadataExpr]), pos: pos});
+		this.appendExpr({expr: EBlock([this.currentMetadataExpr]), pos: pos});
 
 		// create write block
 		var binopExpr1 = this.currentBinopExpr1,
@@ -399,28 +429,162 @@ class Await {
 		}
 	}
 
-	function handle() {
-		var expr = this.rootExpr;
-
-		this.currentExpr = expr;
-
-		// first expr should be block
-		switch (expr.expr) {
-			case EBlock(exprs):
-				this.handleBlock(exprs);
-
-			default:
-				this.append(expr);
-		}
-
-		return {
-			expr: EBlock(this.rootBlock),
-			pos: Context.currentPos()
-		};
+	function appendExpr(expr:Expr) {
+		this.currentBlock.push(expr);
 	}
 
-	function append(expr:Expr) {
-		this.currentBlock.push(expr);
+	function handleFor(it, expr) {
+		switch(it.expr) {
+			case EIn(e1, e2):
+				var name = switch (e1.expr) {
+					case EConst(c): {
+						switch (c) {
+							case CIdent(s): {
+								s;
+							}
+							default: {
+								Context.error("Expect identify before \"in\".", e1.pos);
+							}
+						}
+					}
+					default: {
+						Context.error("Expect identify before \"in\".", e1.pos);
+					}
+				}
+
+				var toIteratorExpr = {
+					expr: ECall(macro macros.Await.toIterator, [e2]),
+					pos: it.pos
+				};
+
+				var hasNextExpr = {
+					expr: ECall(macro macros.Await.hasNext, [e2]),
+					pos: it.pos
+				};
+
+				var nextExpr = {
+					expr: ECall(macro macros.Await.next, [e2]),
+					pos: it.pos
+				};
+
+				var expr = macro {
+					var __iterator = $toIteratorExpr;
+					while ($hasNextExpr) {
+						var $name = $nextExpr;
+						$expr;
+					}
+				};
+
+				this.appendExpr(expr);
+			
+			default:
+		}
+	}
+
+	static function hasArrayAccess(type: AbstractType): Bool {
+		if (type.meta.has(":arrayAccess")) {
+			return true;
+		} else {
+			return type.array.length == 0;
+		}
+	}
+
+	static function hasLength(type: AbstractType): Bool {
+		var impl = type.impl;
+
+		if (impl == null) {
+			return false;
+		} else {
+			for (field in impl.get().statics.get()) {
+				switch (field) {
+					case {kind: FVar(AccCall, _), name: "length"}:
+						return true;
+					default:
+						continue;
+				}
+			}
+
+			return false;
+		}
+	}
+
+	static function isIterator(type: Type): Bool {
+		if (type != null) {
+			var iteratorType = Context.typeof({
+				expr: ECheckType(macro null, TPath({
+					name: "Iterator",
+					pack: [],
+					sub: null,
+					params: [
+						TPType(TPath({
+							name: "Dynamic",
+							pack: [],
+							sub: null,
+							params: [],
+						})),
+					]
+				})),
+				pos: Context.currentPos()
+			});
+
+			return Context.unify(type, iteratorType);
+		}
+
+		return false;
+	}
+	#end
+
+	macro public static function toIterator(iterable: Expr): Expr {
+		var type = Context.follow(Context.typeof(iterable));
+
+		switch(type) {
+			case TInst(_.get() => {module: 'Array', name: 'Array'}, _): {
+				return macro 0;
+			}
+			case TAbstract(_.get() => a, _) if (hasArrayAccess(a) && hasLength(a)): {
+				return macro 0;
+			}
+			case type: {
+				if (isIterator(type)) {
+					return iterable;
+				}
+				else {
+					return macro $iterable.iterator();
+				}
+			}
+		}
+	}
+
+	macro public static function hasNext(iterable: Expr): Expr {
+		var type = Context.follow(Context.typeof(iterable));
+
+		switch(type) {
+			case TInst(_.get() => {module: 'Array', name: 'Array'}, _): {
+				return macro __iterator < $iterable.length;
+			}
+			case TAbstract(_.get() => a, _) if (hasArrayAccess(a) && hasLength(a)): {
+				return macro __iterator < $iterable.length;
+			}
+			default: {
+				return macro __iterator.hasNext();
+			}
+		}
+	}
+
+	macro public static function next(iterable: Expr): Expr {
+		var type = Context.follow(Context.typeof(iterable));
+
+		switch(type) {
+			case TInst(_.get() => {module: 'Array', name: 'Array'}, _): {
+				return macro $iterable[__iterator++];
+			}
+			case TAbstract(_.get() => a, _) if (hasArrayAccess(a) && hasLength(a)): {
+				return macro $iterable[__iterator++];
+			}
+			default: {
+				return macro __iterator.next();
+			}
+		}
 	}
 
 }

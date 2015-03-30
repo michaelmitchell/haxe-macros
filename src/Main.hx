@@ -1,10 +1,12 @@
 /**
 import com.dongxiguo.continuation.Continuation;
 
-@:build(com.dongxiguo.continuation.Continuation.cpsByMeta("async"))
+@:build(com.dongxiguo.continuation.Continuation.cpsByMeta(":async"))
 /**/
 
 /**/
+import macros.Await;
+
 @:build(macros.Async.build())
 @:build(macros.Await.build())
 /**/
@@ -12,54 +14,35 @@ import com.dongxiguo.continuation.Continuation;
 class Main {
 
 	static function main() {
+
 	}
 
-	@async public static function foo(i: Int) {
-		if (i == 2) {
-			trace('before');
+	@:async public static function foo(i: Int) {
+		var arr = [0,1,2,3,4,5,6,7,8,9];
 
-			trace('after');
-		}
-		else if(i == 3) {
-			trace('here');
-
-			trace('there');
-
-		}
-		else {
-			trace('there');
-
-			@await foo(1);
-
-			if (i == 4) {
-				trace('before');
-
-				@await foo(4);
-
-				trace('after');
-			}
-			else {
-				trace('banana');
-			}
+		for (v in arr) {
+			trace(v);
 		}
 
-		if (i == 10) {
-			trace(1);
-
-			@await foo(10);
-
-			trace(2);
-		}
-		else if (i == 20) {
-			trace(3);
-			trace(4);
-		}
-		else {
-			trace(5);
-			trace(6);
+		for (i in 0...10) {
+			trace(i);
 		}
 
-		return i;
+		var map: Map<String, Int> = [
+			'a' => 1,
+			'b' => 2,
+			'c' => 3
+		];
+
+		for(k in map.keys()) {
+			trace(k);
+		}
+
+		var arr = ['a', 'b', 'c', 'd', 'e', 'f'];
+
+		for (v in arr) {
+			trace(v);
+		}
 	}
 
 	static function bar() {
