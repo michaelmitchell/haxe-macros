@@ -18,31 +18,22 @@ class Main {
 	}
 
 	public static function foo(i: Int) {
-		var arr = [0,1,2,3,4,5,6,7,8,9];
+		while(i == 1) {
+			@await bar(1);
 
-		for (v in arr) {
-			trace(v);
+			trace('bar1');
 		}
 
-		for (i in 0...10) {
+		do {
+			@await bar(2);
+
+			trace('bar2');
+		}
+		while(i == 2);
+
+		/*for (i in 0...10) {
 			trace(i);
-		}
-
-		var map: Map<String, Int> = [
-			'a' => 1,
-			'b' => 2,
-			'c' => 3
-		];
-
-		for(k in map.keys()) {
-			trace(k);
-		}
-
-		var arr = ['a', 'b', 'c', 'd', 'e', 'f'];
-
-		for (v in arr) {
-			trace(v);
-		}
+		}*/
 	}
 
 	@async static function bar(i: Int) {

@@ -114,6 +114,9 @@ class Await {
 			case ETry(e, catches):
 				this.handleTry(e, catches);
 
+			case EWhile(econd, e, normalWhile):
+				this.handleWhile(econd, e, normalWhile);
+
 			case EVars(vars):
 				this.handleVars(vars);
 
@@ -122,6 +125,122 @@ class Await {
 		}
 
 		this.currentExpr = null;
+	}
+
+	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool) {
+		var currentBlock = this.currentBlock,
+			block;
+
+		// test for async calls
+		this.isCalled = false;
+
+		if (e != null) {
+			var newBlock = [];
+
+			this.currentBlock = newBlock;
+
+			this.handleExpr(e);
+
+			block = this.currentBlock;
+
+			e.expr = EBlock(newBlock);
+		}
+
+		this.currentBlock = currentBlock;
+
+		var isCalled = this.isCalled,
+			expr;
+
+		if (isCalled) {
+			var method = macro var __continue = function () {};
+
+			if (normalWhile) {
+				//async while
+				expr = macro {
+					$method;
+					var __while = null;
+
+					__while = function () {
+						if ($econd) {
+							$e;
+						}
+						else {
+							__continue();
+						}
+					}
+				};
+			}
+			else {
+				// async do 
+				expr = macro {
+					$method;
+					var __do = null; 
+					
+					__do = function () {
+						$e;
+					};
+				}
+			}
+
+			var lastExpr = block[block.length - 1],
+				hasReturn = false;
+
+			if (lastExpr != null) {
+				hasReturn = switch (lastExpr.expr) {
+					case EReturn(e): true;
+					default: false;
+				}	
+			}
+
+			if (!hasReturn) {
+				if (normalWhile) {
+					block.push(macro __while());
+				}
+				else {
+					block.push(macro {
+						if ($econd) {
+							__do();
+						}
+						else {
+							__continue();
+						}
+					});
+				}
+			}
+			
+			this.appendExpr(expr);
+
+			var newBlock = [];
+			
+			switch (method.expr) {
+				case EVars(vars):
+					for (v in vars) {
+						var expr = v.expr;
+
+						switch (expr.expr) {
+							case EFunction(name, fe):
+								// replace new methods block with new write target
+								fe.expr = {
+									expr: EBlock(newBlock),
+									pos: econd.pos
+								};
+
+							default:
+						}
+					}
+
+				default:
+			}
+
+			// shift current block to new "after if" callback
+			this.currentBlock = newBlock;
+		}
+		else {
+			this.appendExpr({
+				expr: EWhile(econd, e, normalWhile),
+				pos: econd.pos
+			});
+		}
 	}
 
 	function handleBlock(exprs:Array<Expr>) {
@@ -175,7 +294,9 @@ class Await {
 				this.handleExpr(expr);
 			}
 
-			default:
+			default: {
+				this.appendExpr(this.currentExpr);
+			}
 		}
 	}
 
@@ -196,13 +317,8 @@ class Await {
 
 			this.currentBlock = newIfBlock;
 
-			switch(eif.expr) {
-				case EBlock(exprs):
-					this.handleBlock(exprs);
-
-				default:
-			}
-
+			this.handleExpr(eif);
+			
 			blocks.push(this.currentBlock);
 
 			eif.expr = EBlock(newIfBlock);
@@ -213,15 +329,7 @@ class Await {
 
 			this.currentBlock = newElseBlock;
 
-			switch(eelse.expr) {
-				case EBlock(exprs):
-					this.handleBlock(exprs);
-
-				case EIf(econd, eif, eelse):
-					this.handleIf(econd, eif, eelse);
-
-				default:
-			}
+			this.handleExpr(eelse);
 
 			if (this.isInIf) {
 				blocks.push(this.currentBlock);
@@ -432,14 +540,9 @@ class Await {
 
 		//work out the name of assignment if any
 		if (binopExpr1 != null) {
-			switch (binopExpr1.expr) {
-				case EConst(c):
-					switch (c) {
-						case CIdent(s):
-							name = s;
-						default:
-					}
-				default:
+			name = switch (binopExpr1.expr) {
+				case EConst(CIdent(s)): s;
+				default: null;
 			}
 		}
 		else if (currentVar != null) {
