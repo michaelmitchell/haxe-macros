@@ -18,22 +18,17 @@ class Main {
 	}
 
 	public static function foo(i: Int) {
-		while(i == 1) {
+		for (i in 0...10) {
+			trace('before');
+
 			@await bar(1);
 
-			trace('bar1');
+			if (i == 5) {
+				trace('after');
+			}
 		}
 
-		do {
-			@await bar(2);
-
-			trace('bar2');
-		}
-		while(i == 2);
-
-		/*for (i in 0...10) {
-			trace(i);
-		}*/
+		trace(1);
 	}
 
 	@async static function bar(i: Int) {

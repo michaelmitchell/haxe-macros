@@ -11,31 +11,39 @@ class Await {
 	#if macro
 	var currentBlock:Array<Expr>;
 
-	var currentExpr:Expr;
+	var currentExpr: Expr;
 
-	var currentBinop:Binop;
+	var currentBinop: Binop;
 	
-	var currentBinopExpr1:Expr;
+	var currentBinopExpr1: Expr;
 
-	var currentBinopExpr2:Expr;
+	var currentBinopExpr2: Expr;
 
-	var currentMetadataEntry:MetadataEntry;
+	var currentMetadataEntry: MetadataEntry;
 
-	var currentMetadataExpr:Expr;
+	var currentMetadataExpr: Expr;
 
-	var currentVar:Var;
+	var currentVar: Var;
 
-	var field:Field;
+	var field: Field;
 
-	var isCalled:Bool = false;
+	var isCalled: Bool = false;
 
-	var isInIf:Bool = false;
+	var isInIf: Bool = false;
 
-	var method:Function;
+	var isInWhile: Bool = false;
 
-	var rootExpr:Expr;
+	var isInDo: Bool = false;
 
-	var rootBlock:Array<Expr>;
+	var method: Function;
+
+	var rootExpr: Expr;
+
+	var rootBlock: Array<Expr>;
+
+	var exprStack: Array<Expr> = [];
+
+	var callStack: Array<Expr> = [];
 
 	public static function build() {
 		var fields = Context.getBuildFields();
@@ -80,7 +88,7 @@ class Await {
 		// first expr should be block
 		switch (expr.expr) {
 			case EBlock(exprs):
-				this.handleBlock(exprs);
+				this.handleBlock(exprs, true);
 
 			default:
 				this.appendExpr(expr);
@@ -92,7 +100,18 @@ class Await {
 		};
 	}
 
-	function handleExpr(expr: Expr) {
+	function handleBlock(exprs:Array<Expr>, ?isRoot: Bool, ?noStack: Bool) {
+		for (expr in exprs) {
+			this.handleExpr(expr, isRoot, noStack);
+		}
+	}
+
+	function handleExpr(expr: Expr, ?isRoot: Bool, ?noStack: Bool) {
+		if (isRoot) {
+			this.exprStack = [];
+			this.callStack = [];
+		}
+
 		this.currentExpr = expr;
 
 		switch(expr.expr) {
@@ -100,12 +119,26 @@ class Await {
 				this.handleBinop(op, e1, e2);
 
 			case EBlock(exprs):
-				this.handleBlock(exprs);
+				this.handleBlock(exprs, false, noStack);
+
+			case EBreak:
+				this.handleBreak();
+			
+			case EContinue:
+				this.handleContinue();
 
 			case EFor(it, expr):
+				if (noStack != true) {
+					this.exprStack.push(expr);
+				}
+
 				this.handleFor(it, expr);
 
 			case EIf(econd, eif, eelse):
+				if (noStack != true) {
+					this.exprStack.push(expr);
+				}
+
 				this.handleIf(econd, eif, eelse);
 
 			case EMeta(s, e):
@@ -115,6 +148,10 @@ class Await {
 				this.handleTry(e, catches);
 
 			case EWhile(econd, e, normalWhile):
+				if (noStack != true) {
+					this.exprStack.push(expr);
+				}
+
 				this.handleWhile(econd, e, normalWhile);
 
 			case EVars(vars):
@@ -127,12 +164,51 @@ class Await {
 		this.currentExpr = null;
 	}
 
+	function handleBreak() {
+		if (this.isCalled) {
+			if (this.isInDo) {
+				this.appendExpr(macro { __after_do(); return; });
+			}
+			else if(this.isInWhile) {
+				this.appendExpr(macro { __after_while(); return; });
+			}
+			
+			this.currentBlock = [];
+		}
+		else {
+			this.appendExpr(this.currentExpr);
+		}
+	}
+
+	function handleContinue() {
+		if (this.isCalled) {
+			if (this.isInDo) {
+				this.appendExpr(macro { __do(); return; });
+			}
+			else if (this.isInWhile) {
+				this.appendExpr(macro { __while(); return; });
+			}
+			
+			this.currentBlock = [];
+		}
+		else {
+			this.appendExpr(this.currentExpr);
+		}
+	}
+
 	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool) {
 		var currentBlock = this.currentBlock,
 			block;
 
-		// test for async calls
-		this.isCalled = false;
+		this.isInWhile = true;
+
+		if (!normalWhile) {
+			this.isInDo = true;
+		}
+
+		if (!isInWhile) {
+			this.isCalled = false;
+		}
 
 		if (e != null) {
 			var newBlock = [];
@@ -152,9 +228,16 @@ class Await {
 			expr;
 
 		if (isCalled) {
-			var method = macro var __continue = function () {};
+			var newBlock = [];
+
+			var newBlockExpr = {
+				expr: EBlock(newBlock),
+				pos: econd.pos
+			};
 
 			if (normalWhile) {
+				var method = macro var __after_while = function () { $newBlockExpr; };
+
 				//async while
 				expr = macro {
 					$method;
@@ -165,12 +248,14 @@ class Await {
 							$e;
 						}
 						else {
-							__continue();
+							__after_while();
 						}
 					}
 				};
 			}
 			else {
+				var method = macro var __after_do = function () { $newBlockExpr; };
+
 				// async do 
 				expr = macro {
 					$method;
@@ -194,7 +279,7 @@ class Await {
 
 			if (!hasReturn) {
 				if (normalWhile) {
-					block.push(macro __while());
+					block.push(macro __after_while());
 				}
 				else {
 					block.push(macro {
@@ -202,35 +287,13 @@ class Await {
 							__do();
 						}
 						else {
-							__continue();
+							__after_do();
 						}
 					});
 				}
 			}
 			
 			this.appendExpr(expr);
-
-			var newBlock = [];
-			
-			switch (method.expr) {
-				case EVars(vars):
-					for (v in vars) {
-						var expr = v.expr;
-
-						switch (expr.expr) {
-							case EFunction(name, fe):
-								// replace new methods block with new write target
-								fe.expr = {
-									expr: EBlock(newBlock),
-									pos: econd.pos
-								};
-
-							default:
-						}
-					}
-
-				default:
-			}
 
 			// shift current block to new "after if" callback
 			this.currentBlock = newBlock;
@@ -241,11 +304,11 @@ class Await {
 				pos: econd.pos
 			});
 		}
-	}
+		
+		this.isInWhile = false;
 
-	function handleBlock(exprs:Array<Expr>) {
-		for (expr in exprs) {
-			this.handleExpr(expr);
+		if (!normalWhile) {
+			this.isInDo = false;
 		}
 	}
 
@@ -291,7 +354,7 @@ class Await {
 					}
 				};
 
-				this.handleExpr(expr);
+				this.handleExpr(expr, false, true);
 			}
 
 			default: {
@@ -306,7 +369,7 @@ class Await {
 	
 		this.isInIf = true;
 
-		if (!isInIf) {
+		if (!isInIf && !isInWhile) {
 			this.isCalled = false;
 		}
 
@@ -347,7 +410,7 @@ class Await {
 		// only add the "after if" callback if there was an async call made within the if statement
 		if (isCalled) {
 			if (!isInIf) {	
-				method = macro var __continue = function () {};
+				method = macro var __after_if = function () {};
 				
 				this.appendExpr(method);
 			}
@@ -361,11 +424,11 @@ class Await {
 						case EReturn(e):
 							// don't add a call to continue if already returned...
 						default:
-							block.push(macro __continue());
+							block.push(macro __after_if());
 					}	
 				}
 				else {
-					block.push(macro __continue());
+					block.push(macro __after_if());
 				}
 			}
 		}
@@ -511,10 +574,12 @@ class Await {
 
 		if (s.name == 'await') {
 			switch (e.expr) {
-				case ECall(e, p):
+				case ECall(e2, p):
+					this.callStack.push(e);
+
 					this.isCalled = true;
 
-					this.handleCall(e, p);
+					this.handleCall(e2, p);
 
 				default:
 					this.appendExpr(this.currentExpr);
