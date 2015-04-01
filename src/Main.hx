@@ -18,21 +18,39 @@ class Main {
 	}
 
 	public static function foo(i: Int) {
-		for (i in 0...10) {
-			trace('before');
+		if (i == 1) {
+			pie();
 
 			@await bar(1);
 
-			if (i == 5) {
-				trace('after');
-			}
+			trace(1);
 		}
+		else if (i == 2) {
+			pie();
 
-		trace(1);
+			@await bar(1);
+
+			if (i == 2) {
+				@await bar(2);
+			}
+
+			trace(3);
+		}
+		else {
+			pie();
+			
+			@await bar(1);
+
+			trace(3);
+		}
 	}
 
 	@async static function bar(i: Int) {
 		return i;
+	}
+
+	static function pie() {
+		trace('pie is tasty');
 	}
 
 }

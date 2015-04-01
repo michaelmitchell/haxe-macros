@@ -27,23 +27,15 @@ class Await {
 
 	var field: Field;
 
-	var isCalled: Bool = false;
-
-	var isInIf: Bool = false;
-
-	var isInWhile: Bool = false;
-
-	var isInDo: Bool = false;
-
 	var method: Function;
 
 	var rootExpr: Expr;
 
 	var rootBlock: Array<Expr>;
 
-	var exprStack: Array<Expr> = [];
+	var exprStack: Array<String> = [];
 
-	var callStack: Array<Expr> = [];
+	var callStack: Array<Int> = [];
 
 	public static function build() {
 		var fields = Context.getBuildFields();
@@ -108,6 +100,7 @@ class Await {
 
 	function handleExpr(expr: Expr, ?isRoot: Bool, ?noStack: Bool) {
 		if (isRoot) {
+			// clear expr and call stack
 			this.exprStack = [];
 			this.callStack = [];
 		}
@@ -129,14 +122,14 @@ class Await {
 
 			case EFor(it, expr):
 				if (noStack != true) {
-					this.exprStack.push(expr);
+					this.exprStack.push('For');
 				}
 
 				this.handleFor(it, expr);
 
 			case EIf(econd, eif, eelse):
 				if (noStack != true) {
-					this.exprStack.push(expr);
+					this.exprStack.push('If');
 				}
 
 				this.handleIf(econd, eif, eelse);
@@ -149,7 +142,12 @@ class Await {
 
 			case EWhile(econd, e, normalWhile):
 				if (noStack != true) {
-					this.exprStack.push(expr);
+					if (normalWhile) {
+						this.exprStack.push('While');
+					}
+					else {
+						this.exprStack.push('DoWhile');
+					}
 				}
 
 				this.handleWhile(econd, e, normalWhile);
@@ -165,11 +163,11 @@ class Await {
 	}
 
 	function handleBreak() {
-		if (this.isCalled) {
-			if (this.isInDo) {
+		if (this.callStack.length > 0) {
+			if (this.exprStack.indexOf('DoWhile') > -1) {
 				this.appendExpr(macro { __after_do(); return; });
 			}
-			else if(this.isInWhile) {
+			else if (this.exprStack.indexOf('While') > -1) {
 				this.appendExpr(macro { __after_while(); return; });
 			}
 			
@@ -181,11 +179,11 @@ class Await {
 	}
 
 	function handleContinue() {
-		if (this.isCalled) {
-			if (this.isInDo) {
+		if (this.callStack.length > 0) {
+			if (this.exprStack.indexOf('DoWhile') > -1) {
 				this.appendExpr(macro { __do(); return; });
 			}
-			else if (this.isInWhile) {
+			else if (this.exprStack.indexOf('While') > -1) {
 				this.appendExpr(macro { __while(); return; });
 			}
 			
@@ -199,16 +197,6 @@ class Await {
 	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool) {
 		var currentBlock = this.currentBlock,
 			block;
-
-		this.isInWhile = true;
-
-		if (!normalWhile) {
-			this.isInDo = true;
-		}
-
-		if (!isInWhile) {
-			this.isCalled = false;
-		}
 
 		if (e != null) {
 			var newBlock = [];
@@ -224,16 +212,15 @@ class Await {
 
 		this.currentBlock = currentBlock;
 
-		var isCalled = this.isCalled,
-			expr;
-
-		if (isCalled) {
+		if (this.callStack.length > 0) {
 			var newBlock = [];
 
 			var newBlockExpr = {
 				expr: EBlock(newBlock),
 				pos: econd.pos
 			};
+			
+			var expr;
 
 			if (normalWhile) {
 				var method = macro var __after_while = function () { $newBlockExpr; };
@@ -304,12 +291,6 @@ class Await {
 				pos: econd.pos
 			});
 		}
-		
-		this.isInWhile = false;
-
-		if (!normalWhile) {
-			this.isInDo = false;
-		}
 	}
 
 	function handleFor(it, expr) {
@@ -364,17 +345,14 @@ class Await {
 	}
 
 	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
-		var currentBlock = this.currentBlock,
-			isInIf = this.isInIf;
-	
-		this.isInIf = true;
+		// cache current block
+		var currentBlock = this.currentBlock;
 
-		if (!isInIf && !isInWhile) {
-			this.isCalled = false;
-		}
-
-		var blocks = [];
-
+		// check for nested if statement
+		var exprStack = this.exprStack,
+			isInIf = exprStack.indexOf('If') != exprStack.lastIndexOf('If'),
+			blocks = [];
+		
 		if (eif != null) {
 			var newIfBlock = [];
 
@@ -394,7 +372,7 @@ class Await {
 
 			this.handleExpr(eelse);
 
-			if (this.isInIf) {
+			if (isInIf) {
 				blocks.push(this.currentBlock);
 			}
 
@@ -404,70 +382,46 @@ class Await {
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		var isCalled = this.isCalled,
-			method;
+		var isCalled = this.callStack.length > 0,
+			newBlock;
 
 		// only add the "after if" callback if there was an async call made within the if statement
 		if (isCalled) {
 			if (!isInIf) {	
-				method = macro var __after_if = function () {};
-				
-				this.appendExpr(method);
+				newBlock = [];
+
+				var newBlockExpr = {
+					expr: EBlock(newBlock),
+					pos: econd.pos
+				};
+
+				this.appendExpr(macro var __after_if = function () { $newBlockExpr; });
 			}
 
 			// add calls to __continue where needed
 			for (block in blocks) {
-				var lastExpr = block[block.length - 1];
+				var lastExpr = block[block.length - 1],
+					hasReturn = false;
 
 				if (lastExpr != null) {
-					switch (lastExpr.expr) {
-						case EReturn(e):
-							// don't add a call to continue if already returned...
-						default:
-							block.push(macro __after_if());
+					hasReturn = switch (lastExpr.expr) {
+						case EReturn(e): true;
+						default: false;
 					}	
 				}
-				else {
+
+				if (!hasReturn) {
 					block.push(macro __after_if());
 				}
 			}
 		}
 
-		this.appendExpr({
-			expr: EIf(econd, eif, eelse),
-			pos: econd.pos
-		});
-
-		if (isCalled && !isInIf) {
-			// the new root block inside the callback function
-			var newBlock = [];
-			
-			switch (method.expr) {
-				case EVars(vars):
-					for (v in vars) {
-						var expr = v.expr;
-
-						switch (expr.expr) {
-							case EFunction(name, fe):
-								// replace new methods block with new write target
-								fe.expr = {
-									expr: EBlock(newBlock),
-									pos: econd.pos
-								};
-
-
-							default:
-						}
-					}
-
-				default:
-			}
-
-			// shift current block to new "after if" callback
+		this.appendExpr({expr: EIf(econd, eif, eelse), pos: econd.pos});
+		
+		// if there is a new block, change to it
+		if (newBlock != null) {
 			this.currentBlock = newBlock;
 		}
-
-		this.isInIf = false;
 	}
 
 	function handleTry(e, catches: Array<Catch>) {
@@ -575,9 +529,8 @@ class Await {
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e2, p):
-					this.callStack.push(e);
-
-					this.isCalled = true;
+					// push call location
+					this.callStack.push(this.exprStack.length - 1);
 
 					this.handleCall(e2, p);
 
