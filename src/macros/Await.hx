@@ -35,7 +35,7 @@ class Await {
 
 	var exprStack: Array<String> = [];
 
-	var callStack: Array<Int> = [];
+	var callStack: Array<String> = [];
 
 	public static function build() {
 		var fields = Context.getBuildFields();
@@ -72,6 +72,23 @@ class Await {
 		this.currentBlock = this.rootBlock;
 	}
 
+	function isInIf() {
+		var exprStack = this.exprStack,
+			index = exprStack.indexOf('If');
+
+		if (exprStack.lastIndexOf('If') > index) {
+			return true;
+		}
+		else if (exprStack.lastIndexOf('ElseIf') > index) {
+			return true;
+		}
+		else if (exprStack.lastIndexOf('Else') > index) {
+			return true;
+		}
+
+		return false;
+	}
+
 	function handleRootExpr() {
 		var expr = this.rootExpr;
 
@@ -80,7 +97,9 @@ class Await {
 		// first expr should be block
 		switch (expr.expr) {
 			case EBlock(exprs):
-				this.handleBlock(exprs, true);
+				this.exprStack = [];
+				
+				this.handleBlock(exprs);
 
 			default:
 				this.appendExpr(expr);
@@ -92,27 +111,23 @@ class Await {
 		};
 	}
 
-	function handleBlock(exprs:Array<Expr>, ?isRoot: Bool, ?noStack: Bool) {
+	function handleBlock(exprs:Array<Expr>) {
 		for (expr in exprs) {
-			this.handleExpr(expr, isRoot, noStack);
+			this.handleExpr(expr);
 		}
 	}
 
-	function handleExpr(expr: Expr, ?isRoot: Bool, ?noStack: Bool) {
-		if (isRoot) {
-			// clear expr and call stack
-			this.exprStack = [];
-			this.callStack = [];
-		}
+	function handleExpr(expr: Expr, preventStack: Bool = false) {
+		var exprStack = this.exprStack.copy();
 
 		this.currentExpr = expr;
-
+		
 		switch(expr.expr) {
 			case EBinop(op, e1, e2):
 				this.handleBinop(op, e1, e2);
 
 			case EBlock(exprs):
-				this.handleBlock(exprs, false, noStack);
+				this.handleBlock(exprs);
 
 			case EBreak:
 				this.handleBreak();
@@ -121,14 +136,14 @@ class Await {
 				this.handleContinue();
 
 			case EFor(it, expr):
-				if (noStack != true) {
+				if (preventStack == false) {
 					this.exprStack.push('For');
 				}
 
 				this.handleFor(it, expr);
 
 			case EIf(econd, eif, eelse):
-				if (noStack != true) {
+				if (preventStack == false) {
 					this.exprStack.push('If');
 				}
 
@@ -141,13 +156,8 @@ class Await {
 				this.handleTry(e, catches);
 
 			case EWhile(econd, e, normalWhile):
-				if (noStack != true) {
-					if (normalWhile) {
-						this.exprStack.push('While');
-					}
-					else {
-						this.exprStack.push('DoWhile');
-					}
+				if (preventStack == false) {
+					this.exprStack.push(normalWhile ? 'While' : 'DoWhile');
 				}
 
 				this.handleWhile(econd, e, normalWhile);
@@ -159,15 +169,16 @@ class Await {
 				this.appendExpr(this.currentExpr);
 		}
 
+		this.exprStack = exprStack;
 		this.currentExpr = null;
 	}
 
 	function handleBreak() {
-		if (this.callStack.length > 0) {
-			if (this.exprStack.indexOf('DoWhile') > -1) {
+		/*if (this.callStack.length > 0) {
+			if (this.exprStack.indexOf(['DoWhile']) > -1) {
 				this.appendExpr(macro { __after_do(); return; });
 			}
-			else if (this.exprStack.indexOf('While') > -1) {
+			else if (this.exprStack.indexOf(['While']) > -1) {
 				this.appendExpr(macro { __after_while(); return; });
 			}
 			
@@ -175,15 +186,15 @@ class Await {
 		}
 		else {
 			this.appendExpr(this.currentExpr);
-		}
+		}*/
 	}
 
 	function handleContinue() {
-		if (this.callStack.length > 0) {
-			if (this.exprStack.indexOf('DoWhile') > -1) {
+		/*if (this.callStack.length > 0) {
+			if (this.exprStack.indexOf(['DoWhile']) > -1) {
 				this.appendExpr(macro { __do(); return; });
 			}
-			else if (this.exprStack.indexOf('While') > -1) {
+			else if (this.exprStack.indexOf(['While']) > -1) {
 				this.appendExpr(macro { __while(); return; });
 			}
 			
@@ -191,7 +202,7 @@ class Await {
 		}
 		else {
 			this.appendExpr(this.currentExpr);
-		}
+		}*/
 	}
 
 	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool) {
@@ -211,6 +222,8 @@ class Await {
 		}
 
 		this.currentBlock = currentBlock;
+
+		trace(this.callStack);
 
 		if (this.callStack.length > 0) {
 			var newBlock = [];
@@ -335,7 +348,7 @@ class Await {
 					}
 				};
 
-				this.handleExpr(expr, false, true);
+				this.handleExpr(expr);
 			}
 
 			default: {
@@ -349,16 +362,15 @@ class Await {
 		var currentBlock = this.currentBlock;
 
 		// check for nested if statement
-		var exprStack = this.exprStack,
-			isInIf = exprStack.indexOf('If') != exprStack.lastIndexOf('If'),
+		var isInIf = this.isInIf(),
 			blocks = [];
-		
+
 		if (eif != null) {
 			var newIfBlock = [];
 
 			this.currentBlock = newIfBlock;
 
-			this.handleExpr(eif);
+			this.handleExpr(eif, true);
 			
 			blocks.push(this.currentBlock);
 
@@ -370,19 +382,29 @@ class Await {
 
 			this.currentBlock = newElseBlock;
 
-			this.handleExpr(eelse);
-
-			if (isInIf) {
-				blocks.push(this.currentBlock);
+			switch (eelse.expr) {
+				case EIf(econd, eif, eelse):
+					this.exprStack.push('ElseIf');	
+				default:
+					this.exprStack.push('Else');	
 			}
 
+			// don't push to expr stack
+			this.handleExpr(eelse, true);
+
 			eelse.expr = EBlock(newElseBlock);
+
+			var isElse = this.exprStack[this.exprStack.length -1] == 'Else';
+		
+			if (isElse) {
+				blocks.push(this.currentBlock);
+			}
 		}
 
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		var isCalled = this.callStack.length > 0,
+		var isCalled = this.callStack.indexOf('Call') > -1,
 			newBlock;
 
 		// only add the "after if" callback if there was an async call made within the if statement
@@ -529,8 +551,7 @@ class Await {
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e2, p):
-					// push call location
-					this.callStack.push(this.exprStack.length - 1);
+					this.callStack.push('Call');
 
 					this.handleCall(e2, p);
 
