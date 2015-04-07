@@ -35,6 +35,8 @@ class Await {
 
 	var exprStack: Array<String> = [];
 
+	var exprStack2: Array<String> = [];
+
 	var callStack: Array<String> = [];
 
 	public static function build() {
@@ -42,10 +44,11 @@ class Await {
 
 		for (field in fields) {
 			switch (field.kind) {
-				case FFun(method):
+				case FFun(method): {
 					if (method.expr != null) {
 						method = Await.transform(field, method);
 					}
+				}
 				default:
 			}
 		}
@@ -72,17 +75,44 @@ class Await {
 		this.currentBlock = this.rootBlock;
 	}
 
+	function getExprId() {
+		var id = [];
+
+		for (i in 0...8) {
+			id.push(Math.floor(Math.random() * 10));
+		}
+
+		return id.join('');
+	}
+
 	function isInIf() {
 		var exprStack = this.exprStack,
 			index = exprStack.indexOf('If');
 
-		if (exprStack.lastIndexOf('If') > index) {
+		if (index < exprStack.length - 1) {
 			return true;
 		}
-		else if (exprStack.lastIndexOf('ElseIf') > index) {
+
+		return false;
+	}
+
+	function isNestedIf() {
+		var exprStack = this.exprStack,
+			index = exprStack.lastIndexOf('If');
+		
+		// if is nested
+		if (exprStack.lastIndexOf('If') > exprStack.indexOf('If')) {
 			return true;
 		}
-		else if (exprStack.lastIndexOf('Else') > index) {
+
+		return false;
+	}
+
+	function isRootIf() {
+		var exprStack = this.exprStack,
+			len = exprStack.length;
+
+		if (exprStack[len - 1] == 'If') {
 			return true;
 		}
 
@@ -96,11 +126,15 @@ class Await {
 
 		// first expr should be block
 		switch (expr.expr) {
-			case EBlock(exprs):
-				this.exprStack = [];
-				
-				this.handleBlock(exprs);
+			case EBlock(exprs): {
+				for (expr in exprs) {
+					this.callStack = [];
+					this.exprStack = [];
+					this.exprStack2 = [];
 
+					this.handleExpr(expr);
+				}
+			}
 			default:
 				this.appendExpr(expr);
 		}
@@ -111,65 +145,75 @@ class Await {
 		};
 	}
 
-	function handleBlock(exprs:Array<Expr>) {
+	function handleBlock(exprs:Array<Expr>, isRoot: Bool = false) {
 		for (expr in exprs) {
 			this.handleExpr(expr);
 		}
 	}
 
 	function handleExpr(expr: Expr, preventStack: Bool = false) {
-		var exprStack = this.exprStack.copy();
+		var exprStack = this.exprStack.copy(),
+			exprStack2 = this.exprStack2.copy();
 
 		this.currentExpr = expr;
 		
 		switch(expr.expr) {
-			case EBinop(op, e1, e2):
+			case EBinop(op, e1, e2): {
 				this.handleBinop(op, e1, e2);
-
-			case EBlock(exprs):
+			}
+			case EBlock(exprs): {
 				this.handleBlock(exprs);
-
-			case EBreak:
+			}
+			case EBreak: {
 				this.handleBreak();
-			
-			case EContinue:
+			}
+			case EContinue: {
 				this.handleContinue();
-
-			case EFor(it, expr):
+			}
+			case EFor(it, expr): {
 				if (preventStack == false) {
 					this.exprStack.push('For');
+
+					this.exprStack2.push(this.getExprId());
 				}
 
 				this.handleFor(it, expr);
-
-			case EIf(econd, eif, eelse):
+			}
+			case EIf(econd, eif, eelse): {
 				if (preventStack == false) {
 					this.exprStack.push('If');
+					
+					this.exprStack2.push(this.getExprId());
 				}
 
 				this.handleIf(econd, eif, eelse);
-
-			case EMeta(s, e):
+			}
+			case EMeta(s, e): {
 				this.handleMeta(s, e);
-
-			case ETry(e, catches):
+			}
+			case ETry(e, catches): {
 				this.handleTry(e, catches);
-
-			case EWhile(econd, e, normalWhile):
+			}
+			case EWhile(econd, e, normalWhile): {
 				if (preventStack == false) {
 					this.exprStack.push(normalWhile ? 'While' : 'DoWhile');
+					
+					this.exprStack2.push(this.getExprId());
 				}
 
 				this.handleWhile(econd, e, normalWhile);
-
-			case EVars(vars):
+			}
+			case EVars(vars): {
 				this.handleVars(vars);
-
-			default:
+			}
+			default: {
 				this.appendExpr(this.currentExpr);
+			}
 		}
 
 		this.exprStack = exprStack;
+		this.exprStack2 = exprStack2;
+
 		this.currentExpr = null;
 	}
 
@@ -223,8 +267,6 @@ class Await {
 
 		this.currentBlock = currentBlock;
 
-		trace(this.callStack);
-
 		if (this.callStack.length > 0) {
 			var newBlock = [];
 
@@ -272,8 +314,12 @@ class Await {
 
 			if (lastExpr != null) {
 				hasReturn = switch (lastExpr.expr) {
-					case EReturn(e): true;
-					default: false;
+					case EReturn(e): {
+						true;
+					}
+					default: {
+						false;
+					}
 				}	
 			}
 
@@ -350,21 +396,18 @@ class Await {
 
 				this.handleExpr(expr);
 			}
-
-			default: {
+			default: 
 				this.appendExpr(this.currentExpr);
-			}
 		}
 	}
 
 	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
-		// cache current block
-		var currentBlock = this.currentBlock;
-
-		// check for nested if statement
-		var isInIf = this.isInIf(),
+		var currentBlock = this.currentBlock,
+			exprStack = this.exprStack,
+			exprStack2 = this.exprStack2,
+			isRootIf = this.isRootIf(),
 			blocks = [];
-
+		
 		if (eif != null) {
 			var newIfBlock = [];
 
@@ -378,23 +421,30 @@ class Await {
 		}
 
 		if (eelse != null) {
-			var newElseBlock = [];
+			var newElseBlock = [],
+				isElse = false;
 
 			this.currentBlock = newElseBlock;
 
 			switch (eelse.expr) {
-				case EIf(econd, eif, eelse):
-					this.exprStack.push('ElseIf');	
-				default:
-					this.exprStack.push('Else');	
+				case EIf(econd, eif, eelse): {
+					this.exprStack.push('ElseIf');
+					
+					this.exprStack2.push(this.getExprId());
+				}
+				default: {
+					this.exprStack.push('Else');
+					
+					this.exprStack2.push(this.getExprId());
+
+					isElse = true;
+				}
 			}
 
 			// don't push to expr stack
 			this.handleExpr(eelse, true);
 
 			eelse.expr = EBlock(newElseBlock);
-
-			var isElse = this.exprStack[this.exprStack.length -1] == 'Else';
 		
 			if (isElse) {
 				blocks.push(this.currentBlock);
@@ -403,13 +453,21 @@ class Await {
 
 		// switch back to previous block
 		this.currentBlock = currentBlock;
-
-		var isCalled = this.callStack.indexOf('Call') > -1,
+		
+		var ids = exprStack2.slice(exprStack.lastIndexOf('If')),
+			isCalled = false,
 			newBlock;
+
+		for (id in ids) {
+			if (this.callStack.indexOf(id) != -1) {
+				isCalled = true;
+				break;
+			}
+		}
 
 		// only add the "after if" callback if there was an async call made within the if statement
 		if (isCalled) {
-			if (!isInIf) {	
+			if (isRootIf) {	
 				newBlock = [];
 
 				var newBlockExpr = {
@@ -427,8 +485,12 @@ class Await {
 
 				if (lastExpr != null) {
 					hasReturn = switch (lastExpr.expr) {
-						case EReturn(e): true;
-						default: false;
+						case EReturn(e): {
+							true;
+						}
+						default: {
+							false;
+						}
 					}	
 				}
 
@@ -455,8 +517,9 @@ class Await {
 			this.currentBlock = newBlock;
 
 			switch (e.expr) {
-				case EBlock(exprs):
+				case EBlock(exprs): {
 					this.handleBlock(exprs);
+				}
 				default:
 			}
 
@@ -472,9 +535,9 @@ class Await {
 				this.currentBlock = newBlock;
 
 				switch (e.expr) {
-					case EBlock(exprs):
+					case EBlock(exprs): {
 						this.handleBlock(exprs);
-
+					}
 					default:
 				}
 
@@ -501,11 +564,12 @@ class Await {
 
 			if (expr != null) {
 				switch (expr) {
-					case EMeta(s, e):
+					case EMeta(s, e): {
 						this.handleMeta(s, e);
-
-					default:
+					}
+					default: {
 						this.appendExpr(this.currentExpr);
+					}
 				}
 			}
 			else {
@@ -529,11 +593,12 @@ class Await {
 
 			if (expr != null) {
 				switch (expr.expr) {
-					case EMeta(s, e):
+					case EMeta(s, e): {
 						this.handleMeta(s, e);
-
-					default:
+					}
+					default: {
 						this.appendExpr(this.currentExpr);
+					}
 				}
 			}
 			else {
@@ -550,13 +615,14 @@ class Await {
 
 		if (s.name == 'await') {
 			switch (e.expr) {
-				case ECall(e2, p):
-					this.callStack.push('Call');
+				case ECall(e2, p): {
+					this.callStack.push(this.exprStack2[this.exprStack2.length - 1]);
 
 					this.handleCall(e2, p);
-
-				default:
+				}
+				default: {
 					this.appendExpr(this.currentExpr);
+				}
 			}
 		}
 		else {
@@ -580,8 +646,12 @@ class Await {
 		//work out the name of assignment if any
 		if (binopExpr1 != null) {
 			name = switch (binopExpr1.expr) {
-				case EConst(CIdent(s)): s;
-				default: null;
+				case EConst(CIdent(s)): {
+					s;
+				}
+				default: {
+					null;
+				}
 			}
 		}
 		else if (currentVar != null) {
@@ -603,7 +673,7 @@ class Await {
 		}
 
 		switch (method.expr) {
-			case EFunction(name, fe):
+			case EFunction(name, fe): {
 				// replace new methods block with new write target
 				fe.expr = {
 					expr: EBlock(newBlock),
@@ -611,7 +681,7 @@ class Await {
 				};
 
 				this.currentBlock = newBlock;
-
+			}
 			default:
 		}
 	}
@@ -636,10 +706,12 @@ class Await {
 		} else {
 			for (field in impl.get().statics.get()) {
 				switch (field) {
-					case {kind: FVar(AccCall, _), name: "length"}:
+					case {kind: FVar(AccCall, _), name: "length"}: {
 						return true;
-					default:
+					}
+					default: {
 						continue;
+					}
 				}
 			}
 
