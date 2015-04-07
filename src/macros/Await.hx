@@ -33,11 +33,9 @@ class Await {
 
 	var rootBlock: Array<Expr>;
 
-	var exprStack: Array<String> = [];
+	var exprStack: Array<Expr> = [];
 
-	var exprStack2: Array<String> = [];
-
-	var callStack: Array<String> = [];
+	var callStack: Array<Expr> = [];
 
 	public static function build() {
 		var fields = Context.getBuildFields();
@@ -85,38 +83,16 @@ class Await {
 		return id.join('');
 	}
 
-	function isInIf() {
-		var exprStack = this.exprStack,
-			index = exprStack.indexOf('If');
-
-		if (index < exprStack.length - 1) {
-			return true;
-		}
-
-		return false;
-	}
-
-	function isNestedIf() {
-		var exprStack = this.exprStack,
-			index = exprStack.lastIndexOf('If');
-		
-		// if is nested
-		if (exprStack.lastIndexOf('If') > exprStack.indexOf('If')) {
-			return true;
-		}
-
-		return false;
-	}
-
 	function isRootIf() {
 		var exprStack = this.exprStack,
-			len = exprStack.length;
+			lastExpr = exprStack[exprStack.length - 1];
 
-		if (exprStack[len - 1] == 'If') {
-			return true;
+		var isRootIf = switch (lastExpr.expr) {
+			case EIf(econd, eif, eelse): true;
+			default: false;
 		}
 
-		return false;
+		return isRootIf;
 	}
 
 	function handleRootExpr() {
@@ -130,7 +106,6 @@ class Await {
 				for (expr in exprs) {
 					this.callStack = [];
 					this.exprStack = [];
-					this.exprStack2 = [];
 
 					this.handleExpr(expr);
 				}
@@ -152,8 +127,7 @@ class Await {
 	}
 
 	function handleExpr(expr: Expr, preventStack: Bool = false) {
-		var exprStack = this.exprStack.copy(),
-			exprStack2 = this.exprStack2.copy();
+		var exprStack = this.exprStack.copy();
 
 		this.currentExpr = expr;
 		
@@ -172,18 +146,14 @@ class Await {
 			}
 			case EFor(it, expr): {
 				if (preventStack == false) {
-					this.exprStack.push('For');
-
-					this.exprStack2.push(this.getExprId());
+					this.exprStack.push(expr);
 				}
 
 				this.handleFor(it, expr);
 			}
 			case EIf(econd, eif, eelse): {
 				if (preventStack == false) {
-					this.exprStack.push('If');
-					
-					this.exprStack2.push(this.getExprId());
+					this.exprStack.push(expr);
 				}
 
 				this.handleIf(econd, eif, eelse);
@@ -196,9 +166,7 @@ class Await {
 			}
 			case EWhile(econd, e, normalWhile): {
 				if (preventStack == false) {
-					this.exprStack.push(normalWhile ? 'While' : 'DoWhile');
-					
-					this.exprStack2.push(this.getExprId());
+					this.exprStack.push(expr);
 				}
 
 				this.handleWhile(econd, e, normalWhile);
@@ -212,7 +180,6 @@ class Await {
 		}
 
 		this.exprStack = exprStack;
-		this.exprStack2 = exprStack2;
 
 		this.currentExpr = null;
 	}
@@ -404,7 +371,6 @@ class Await {
 	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
 		var currentBlock = this.currentBlock,
 			exprStack = this.exprStack,
-			exprStack2 = this.exprStack2,
 			isRootIf = this.isRootIf(),
 			blocks = [];
 		
@@ -428,14 +394,10 @@ class Await {
 
 			switch (eelse.expr) {
 				case EIf(econd, eif, eelse): {
-					this.exprStack.push('ElseIf');
-					
-					this.exprStack2.push(this.getExprId());
+					this.exprStack.push(macro 'ElseIf');
 				}
 				default: {
-					this.exprStack.push('Else');
-					
-					this.exprStack2.push(this.getExprId());
+					this.exprStack.push(macro 'Else');
 
 					isElse = true;
 				}
@@ -453,15 +415,27 @@ class Await {
 
 		// switch back to previous block
 		this.currentBlock = currentBlock;
-		
-		var ids = exprStack2.slice(exprStack.lastIndexOf('If')),
-			isCalled = false,
+
+		var isCalled = false,
+			stack = [],
 			newBlock;
 
-		for (id in ids) {
-			if (this.callStack.indexOf(id) != -1) {
+		for (expr in exprStack) {
+			switch (expr.expr) {
+				case EIf(a, b, c): {
+					stack.push('If');
+				}
+				default: {
+					stack.push(null);
+				}
+			}
+		}
+
+		var exprs = exprStack.slice(stack.lastIndexOf('If'));
+
+		for (expr in exprs) {
+			if (this.callStack.indexOf(expr) > -1) {
 				isCalled = true;
-				break;
 			}
 		}
 
@@ -616,7 +590,7 @@ class Await {
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e2, p): {
-					this.callStack.push(this.exprStack2[this.exprStack2.length - 1]);
+					this.callStack.push(this.exprStack[this.exprStack.length - 1]);
 
 					this.handleCall(e2, p);
 				}

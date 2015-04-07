@@ -26,7 +26,7 @@ class Main {
 			if (i == 1) {
 				trace('before');
 
-				@await bar(2);
+				//@await bar(2);
 
 				trace('after');
 			}
