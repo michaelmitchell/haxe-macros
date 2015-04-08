@@ -83,6 +83,48 @@ class Await {
 		return id.join('');
 	}
 
+	function getExprSummary(exprs: Array<Expr>): Array<String> {
+		var stack = [];
+
+		for (expr in exprs) {
+			switch (expr.expr) {
+				case EIf(econd, eif, eelse): {
+					stack.push('If');
+				}
+				case EConst(CString('ElseIf')): {
+					stack.push('ElseIf');
+				}
+				case EConst(CString('Else')): {
+					stack.push('ElseIf');
+				}
+				case EFor(econd, expr): {
+					stack.push('For');
+				}
+				case EWhile(econd, e, normalWhile): {
+					stack.push('While');
+				}
+				default: {
+					stack.push(null);
+				}
+			}
+		}
+
+		return stack;
+	}
+
+	function isCalled(exprName: String) {
+		var summary = this.getExprSummary(this.exprStack),
+			exprs = this.exprStack.slice(summary.lastIndexOf(exprName));
+
+		for (expr in exprs) {
+			if (this.callStack.indexOf(expr) > -1) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	function isRootIf() {
 		var exprStack = this.exprStack,
 			lastExpr = exprStack[exprStack.length - 1];
@@ -234,7 +276,9 @@ class Await {
 
 		this.currentBlock = currentBlock;
 
-		if (this.callStack.length > 0) {
+		var isCalled = this.isCalled('While');
+
+		if (isCalled) {
 			var newBlock = [];
 
 			var newBlockExpr = {
@@ -292,7 +336,7 @@ class Await {
 
 			if (!hasReturn) {
 				if (normalWhile) {
-					block.push(macro __after_while());
+					block.push(macro __while());
 				}
 				else {
 					block.push(macro {
@@ -368,35 +412,6 @@ class Await {
 		}
 	}
 
-	function getExprSummary(exprs: Array<Expr>): Array<String> {
-		var stack = [];
-
-		for (expr in exprs) {
-			switch (expr.expr) {
-				case EIf(econd, eif, eelse): {
-					stack.push('If');
-				}
-				case EConst(CString('ElseIf')): {
-					stack.push('ElseIf');
-				}
-				case EConst(CString('Else')): {
-					stack.push('ElseIf');
-				}
-				case EFor(econd, expr): {
-					stack.push('For');
-				}
-				case EWhile(econd, e, normalWhile): {
-					stack.push('While');
-				}
-				default: {
-					stack.push(null);
-				}
-			}
-		}
-
-		return stack;
-	}
-
 	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
 		var currentBlock = this.currentBlock,
 			isRootIf = this.isRootIf(),
@@ -444,18 +459,8 @@ class Await {
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		var summary = this.getExprSummary(this.exprStack),
-			isCalled = false,
+		var isCalled = this.isCalled('If'),
 			newBlock;
-
-		// check for overlapping expression in callstack
-		var exprs = this.exprStack.slice(summary.lastIndexOf('If'));
-
-		for (expr in exprs) {
-			if (this.callStack.indexOf(expr) > -1) {
-				isCalled = true;
-			}
-		}
 
 		// only add the "after if" callback if there was an async call made within the if statement
 		if (isCalled) {

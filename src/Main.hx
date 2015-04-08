@@ -21,24 +21,21 @@ class Main {
 		trace('before all');
 
 		if (i == 1) {
-			trace('before');
+			trace(0);
 
-			if (i == 2) {
-				if (i == 3) {
-					//@await bar(1);
-				}
+			@await bar(1);
 
-				trace(1);
-			}
-			else if (i == 3) {
+			do {
 				trace(1);
 
-				return;
+				@await bar(1);
 			}
-		
-			trace('after');
+			while (i < 0);
+
+			
+			trace('here here');
 		}
-
+		
 		trace('after all');
 	}
 
