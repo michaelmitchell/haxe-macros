@@ -368,6 +368,35 @@ class Await {
 		}
 	}
 
+	function getExprSummary(exprs: Array<Expr>): Array<String> {
+		var stack = [];
+
+		for (expr in exprs) {
+			switch (expr.expr) {
+				case EIf(econd, eif, eelse): {
+					stack.push('If');
+				}
+				case EConst(CString('ElseIf')): {
+					stack.push('ElseIf');
+				}
+				case EConst(CString('Else')): {
+					stack.push('ElseIf');
+				}
+				case EFor(econd, expr): {
+					stack.push('For');
+				}
+				case EWhile(econd, e, normalWhile): {
+					stack.push('While');
+				}
+				default: {
+					stack.push(null);
+				}
+			}
+		}
+
+		return stack;
+	}
+
 	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
 		var currentBlock = this.currentBlock,
 			isRootIf = this.isRootIf(),
@@ -415,28 +444,12 @@ class Await {
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		var isCalled = false,
-			stack = [],
+		var summary = this.getExprSummary(this.exprStack),
+			isCalled = false,
 			newBlock;
 
-		for (expr in this.exprStack) {
-			switch (expr.expr) {
-				case EIf(econd, eif, eelse): {
-					stack.push('If');
-				}
-				case EConst(CString('ElseIf')): {
-					stack.push('ElseIf');
-				}
-				case EConst(CString('Else')): {
-					stack.push('ElseIf');
-				}
-				default: {
-					stack.push(null);
-				}
-			}
-		}
-
-		var exprs = this.exprStack.slice(stack.lastIndexOf('If'));
+		// check for overlapping expression in callstack
+		var exprs = this.exprStack.slice(summary.lastIndexOf('If'));
 
 		for (expr in exprs) {
 			if (this.callStack.indexOf(expr) > -1) {
@@ -455,6 +468,18 @@ class Await {
 				};
 
 				this.appendExpr(macro var __after_if = function () { $newBlockExpr; });
+			}
+
+			// if no else block supplied, create an empty one to ensure after if is called
+			if (eelse == null) {
+				var newElseBlock = [];
+
+				eelse = {
+					expr: EBlock(newElseBlock),
+					pos: econd.pos
+				};
+
+				blocks.push(newElseBlock);
 			}
 
 			// add calls to __continue where needed
@@ -595,9 +620,9 @@ class Await {
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e2, p): {
-					//trace(this.exprStack[this.exprStack.length - 1]);
-
-					this.callStack.push(this.exprStack[this.exprStack.length - 1]);
+					for (expr in this.exprStack) {
+						this.callStack.push(expr);
+					}
 
 					this.handleCall(e2, p);
 				}

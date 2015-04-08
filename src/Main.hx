@@ -24,22 +24,18 @@ class Main {
 			trace('before');
 
 			if (i == 2) {
-				trace('normal if');
+				if (i == 3) {
+					//@await bar(1);
+				}
 
-				//@await bar(1);
-
-				trace('normal if');
+				trace(1);
 			}
 			else if (i == 3) {
-				trace('still normal');
+				trace(1);
 
-				//@await bar(1);
-
-				trace('more');
+				return;
 			}
-
-			@await bar(1);
-
+		
 			trace('after');
 		}
 
