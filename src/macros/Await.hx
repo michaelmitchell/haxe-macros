@@ -101,7 +101,12 @@ class Await {
 					stack.push('For');
 				}
 				case EWhile(econd, e, normalWhile): {
-					stack.push('While');
+					if (normalWhile) {
+						stack.push('While');
+					}
+					else {
+						stack.push('Do');
+					}
 				}
 				default: {
 					stack.push(null);
@@ -122,6 +127,26 @@ class Await {
 			}
 		}
 
+		return false;
+	}
+
+	function isInDo() {
+		var summary = this.getExprSummary(this.exprStack);
+
+		if (summary.indexOf('Do') != -1) {
+			return true;
+		}
+		
+		return false;
+	}
+
+	function isInWhile() {
+		var summary = this.getExprSummary(this.exprStack);
+
+		if (summary.indexOf('While') != -1) {
+			return true;
+		}
+		
 		return false;
 	}
 
@@ -227,35 +252,31 @@ class Await {
 	}
 
 	function handleBreak() {
-		/*if (this.callStack.length > 0) {
-			if (this.exprStack.indexOf(['DoWhile']) > -1) {
-				this.appendExpr(macro { __after_do(); return; });
-			}
-			else if (this.exprStack.indexOf(['While']) > -1) {
+		if (this.callStack.length > 0) {
+			if (this.isInWhile()) {
 				this.appendExpr(macro { __after_while(); return; });
 			}
-			
-			this.currentBlock = [];
+			else if (this.isInDo()) {
+				this.appendExpr(macro { __after_do(); return; });
+			}
 		}
 		else {
 			this.appendExpr(this.currentExpr);
-		}*/
+		}
 	}
 
 	function handleContinue() {
-		/*if (this.callStack.length > 0) {
-			if (this.exprStack.indexOf(['DoWhile']) > -1) {
-				this.appendExpr(macro { __do(); return; });
-			}
-			else if (this.exprStack.indexOf(['While']) > -1) {
+		if (this.callStack.length > 0) {
+			if (this.isInWhile()) {
 				this.appendExpr(macro { __while(); return; });
 			}
-			
-			this.currentBlock = [];
+			else if (this.isInDo()) {
+				this.appendExpr(macro { __do(); return; });
+			}
 		}
 		else {
 			this.appendExpr(this.currentExpr);
-		}*/
+		}
 	}
 
 	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool) {
@@ -339,14 +360,16 @@ class Await {
 					block.push(macro __while());
 				}
 				else {
-					block.push(macro {
+					this.condition = macro {
 						if ($econd) {
 							__do();
 						}
 						else {
 							__after_do();
 						}
-					});
+					};
+
+					block.push(this.condition);
 				}
 			}
 			

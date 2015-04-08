@@ -20,21 +20,26 @@ class Main {
 	public static function foo(i: Int) {
 		trace('before all');
 
-		if (i == 1) {
-			trace(0);
+		do {
+			trace('before');
 
-			@await bar(1);
+			if (i == 1) {
+				@await bar(1);
 
-			do {
 				trace(1);
 
-				@await bar(1);
-			}
-			while (i < 0);
+				break;
 
-			
-			trace('here here');
+				trace(2);
+			}
+
+			if (i == 2) {
+				continue;
+			}
+
+			trace('after');
 		}
+		while (i < 0);
 		
 		trace('after all');
 	}
