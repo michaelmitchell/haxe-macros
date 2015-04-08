@@ -18,47 +18,32 @@ class Main {
 	}
 
 	public static function foo(i: Int) {
-		if (i == 0) {
-			trace(1);
+		trace('before all');
 
-			@await bar(1);
-
-			if (i == 1) {
-				trace('before');
-
-				//@await bar(2);
-
-				trace('after');
-			}
-			else if(i == 2) {
-				trace('before');
-
-				trace('after');
-			}
-			else {
-				if (i == 3) {
-					trace('before');
-
-					trace('after');
-				}
-
-				trace('after if');
-			}
-
-			trace(3);
-		}
-		else if (i == 1) {
+		if (i == 1) {
 			trace('before');
+
+			if (i == 2) {
+				trace('normal if');
+
+				//@await bar(1);
+
+				trace('normal if');
+			}
+			else if (i == 3) {
+				trace('still normal');
+
+				//@await bar(1);
+
+				trace('more');
+			}
 
 			@await bar(1);
 
 			trace('after');
 		}
-		else {
-			trace(3);
-		}
 
-		trace('after main if');
+		trace('after all');
 	}
 
 	@async static function bar(i: Int) {

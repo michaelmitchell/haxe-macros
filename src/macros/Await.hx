@@ -370,7 +370,6 @@ class Await {
 
 	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
 		var currentBlock = this.currentBlock,
-			exprStack = this.exprStack,
 			isRootIf = this.isRootIf(),
 			blocks = [];
 		
@@ -420,10 +419,16 @@ class Await {
 			stack = [],
 			newBlock;
 
-		for (expr in exprStack) {
+		for (expr in this.exprStack) {
 			switch (expr.expr) {
-				case EIf(a, b, c): {
+				case EIf(econd, eif, eelse): {
 					stack.push('If');
+				}
+				case EConst(CString('ElseIf')): {
+					stack.push('ElseIf');
+				}
+				case EConst(CString('Else')): {
+					stack.push('ElseIf');
 				}
 				default: {
 					stack.push(null);
@@ -431,7 +436,7 @@ class Await {
 			}
 		}
 
-		var exprs = exprStack.slice(stack.lastIndexOf('If'));
+		var exprs = this.exprStack.slice(stack.lastIndexOf('If'));
 
 		for (expr in exprs) {
 			if (this.callStack.indexOf(expr) > -1) {
@@ -590,6 +595,8 @@ class Await {
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e2, p): {
+					//trace(this.exprStack[this.exprStack.length - 1]);
+
 					this.callStack.push(this.exprStack[this.exprStack.length - 1]);
 
 					this.handleCall(e2, p);
