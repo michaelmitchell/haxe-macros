@@ -73,16 +73,6 @@ class Await {
 		this.currentBlock = this.rootBlock;
 	}
 
-	function getExprId() {
-		var id = [];
-
-		for (i in 0...8) {
-			id.push(Math.floor(Math.random() * 10));
-		}
-
-		return id.join('');
-	}
-
 	function getExprSummary(exprs: Array<Expr>): Array<String> {
 		var stack = [];
 
@@ -162,6 +152,73 @@ class Await {
 		return isRootIf;
 	}
 
+	function findExprs(ein: Expr, names: Array<String>, ?ignore: Array<String>) {
+		var result = [];
+
+		if (ignore == null) {
+			ignore = [];
+		}
+
+		switch(ein.expr) {
+			case EBlock(exprs): {
+				for (expr in exprs) {
+					result = result.concat(this.findExprs(expr, names, ignore));
+				}
+			}
+			case EBreak: {
+				if (names.indexOf('Break') != -1) {
+					result.push(ein);
+				}
+			}
+			case EContinue: {
+				if (names.indexOf('Continue') != -1) {
+					result.push(ein);
+				}
+			}
+			case EFor(it, expr): {
+				if (ignore.indexOf('For') == -1) {
+					if (expr != null) {
+						result = result.concat(this.findExprs(expr, names, ignore));
+					}
+				}
+			}
+			case EIf(econd, eif, eelse): {
+				if (ignore.indexOf('If') == -1) {
+					if (eif != null) {
+						result = result.concat(this.findExprs(eif, names, ignore));
+					}
+
+					if (eelse != null) {
+						result = result.concat(this.findExprs(eelse, names, ignore));
+					}
+				}
+			}
+			case ETry(e, catches): {
+				if (ignore.indexOf('Try') == -1) {
+					if (e != null) {
+						result = result.concat(this.findExprs(e, names, ignore));
+					}
+
+					for(c in catches) {
+						if (c.expr != null) {
+							result = result.concat(this.findExprs(c.expr, names, ignore));
+						}
+					}
+				}
+			}
+			case EWhile(econd, e, normalWhile): {
+				if (ignore.indexOf('While') == -1) {
+					if (e != null) {
+						result = result.concat(this.findExprs(e, names, ignore));
+					}
+				}
+			}
+			default:
+		}
+
+		return result;
+	}
+
 	function handleRootExpr() {
 		var expr = this.rootExpr;
 
@@ -205,12 +262,6 @@ class Await {
 			case EBlock(exprs): {
 				this.handleBlock(exprs);
 			}
-			case EBreak: {
-				this.handleBreak();
-			}
-			case EContinue: {
-				this.handleContinue();
-			}
 			case EFor(it, expr): {
 				if (preventStack == false) {
 					this.exprStack.push(expr);
@@ -251,43 +302,18 @@ class Await {
 		this.currentExpr = null;
 	}
 
-	function handleBreak() {
-		if (this.callStack.length > 0) {
-			if (this.isInWhile()) {
-				this.appendExpr(macro { __after_while(); return; });
-			}
-			else if (this.isInDo()) {
-				this.appendExpr(macro { __after_do(); return; });
-			}
-		}
-		else {
-			this.appendExpr(this.currentExpr);
-		}
-	}
-
-	function handleContinue() {
-		if (this.callStack.length > 0) {
-			if (this.isInWhile()) {
-				this.appendExpr(macro { __while(); return; });
-			}
-			else if (this.isInDo()) {
-				this.appendExpr(macro { __do(); return; });
-			}
-		}
-		else {
-			this.appendExpr(this.currentExpr);
-		}
-	}
-
 	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool) {
 		var currentBlock = this.currentBlock,
+			controlExprs = [],
 			block;
-
+		
 		if (e != null) {
+			controlExprs = this.findExprs(e, ['Break', 'Continue'], ['For', 'While']);
+
 			var newBlock = [];
 
 			this.currentBlock = newBlock;
-
+		
 			this.handleExpr(e);
 
 			block = this.currentBlock;
@@ -297,7 +323,7 @@ class Await {
 
 		this.currentBlock = currentBlock;
 
-		var isCalled = this.isCalled('While');
+		var isCalled = this.isCalled(normalWhile ? 'While' : 'Do');
 
 		if (isCalled) {
 			var newBlock = [];
@@ -307,7 +333,7 @@ class Await {
 				pos: econd.pos
 			};
 			
-			var expr;
+			var	expr;
 
 			if (normalWhile) {
 				var method = macro var __after_while = function () { $newBlockExpr; };
@@ -326,6 +352,19 @@ class Await {
 						}
 					}
 				};
+
+				for (expr in controlExprs) {
+					var newExpr = switch (expr.expr) {
+						case EBreak:
+							macro { __after_while(); return; };
+						case EContinue:
+							macro { __while(); return; };
+						default:
+							expr;
+					}
+
+					expr.expr = newExpr.expr;
+				}
 			}
 			else {
 				var method = macro var __after_do = function () { $newBlockExpr; };
@@ -339,38 +378,26 @@ class Await {
 						$e;
 					};
 				}
+
+				for (expr in controlExprs) {
+					var newExpr = switch (expr.expr) {
+						case EBreak:
+							macro { __after_do(); return; };
+						case EContinue:
+							macro { if ($econd) __do();	else __after_do(); return; };
+						default:
+							expr;
+					}
+
+					expr.expr = newExpr.expr;
+				}
 			}
 
-			var lastExpr = block[block.length - 1],
-				hasReturn = false;
-
-			if (lastExpr != null) {
-				hasReturn = switch (lastExpr.expr) {
-					case EReturn(e): {
-						true;
-					}
-					default: {
-						false;
-					}
-				}	
+			if (normalWhile) {
+				block.push(macro __while());
 			}
-
-			if (!hasReturn) {
-				if (normalWhile) {
-					block.push(macro __while());
-				}
-				else {
-					this.condition = macro {
-						if ($econd) {
-							__do();
-						}
-						else {
-							__after_do();
-						}
-					};
-
-					block.push(this.condition);
-				}
+			else {
+				block.push(macro { if ($econd) __do(); else __after_do(); });
 			}
 			
 			this.appendExpr(expr);
@@ -428,7 +455,7 @@ class Await {
 					}
 				};
 
-				this.handleExpr(expr);
+				this.handleExpr(expr, true);
 			}
 			default: 
 				this.appendExpr(this.currentExpr);
@@ -512,23 +539,7 @@ class Await {
 
 			// add calls to __continue where needed
 			for (block in blocks) {
-				var lastExpr = block[block.length - 1],
-					hasReturn = false;
-
-				if (lastExpr != null) {
-					hasReturn = switch (lastExpr.expr) {
-						case EReturn(e): {
-							true;
-						}
-						default: {
-							false;
-						}
-					}	
-				}
-
-				if (!hasReturn) {
-					block.push(macro __after_if());
-				}
+				block.push(macro __after_if());
 			}
 		}
 

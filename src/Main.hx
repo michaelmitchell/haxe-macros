@@ -20,26 +20,49 @@ class Main {
 	public static function foo(i: Int) {
 		trace('before all');
 
-		do {
-			trace('before');
+		if (i == 1) {
+			trace(1);
 
-			if (i == 1) {
-				@await bar(1);
+			@await bar(1);
 
+			while (i > 0) {
 				trace(1);
 
-				break;
+				if (i == 2) {
+					break;
+				}
+
+				do {
+					trace(1);
+
+					//@await bar(2);
+
+					if (i == 2) {
+						return;
+					}
+
+					if (i == 3) {
+						continue;
+					}
+					else {
+						break;
+					}
+				}
+				while (i < 0);
+
+				if (i == 3) {
+					continue;
+				}
+				
+				@await bar(1);
 
 				trace(2);
 			}
 
-			if (i == 2) {
-				continue;
-			}
+			trace('after while');
 
-			trace('after');
+			return;
 		}
-		while (i < 0);
 		
 		trace('after all');
 	}
