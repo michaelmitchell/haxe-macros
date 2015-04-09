@@ -78,6 +78,15 @@ class Await {
 
 		for (expr in exprs) {
 			switch (expr.expr) {
+				case EBinop(op, e1, e2): {
+					stack.push('Binop');
+				}
+				case EBlock(exprs): {
+					stack.push('Block');
+				}
+				case ECall(e, params): {
+					stack.push('Call');
+				}
 				case EIf(econd, eif, eelse): {
 					stack.push('If');
 				}
@@ -89,6 +98,12 @@ class Await {
 				}
 				case EFor(econd, expr): {
 					stack.push('For');
+				}
+				case EMeta(s, e): {
+					stack.push('Meta');
+				}
+				case EVars(vars): {
+					stack.push('Vars');
 				}
 				case ESwitch(e, cases, edef): {
 					stack.push('Switch');
@@ -102,6 +117,7 @@ class Await {
 					}
 				}
 				default: {
+					trace(expr);
 					stack.push(null);
 				}
 			}
@@ -270,6 +286,10 @@ class Await {
 		var exprStack = this.exprStack.copy();
 
 		this.currentExpr = expr;
+
+		if (preventStack == false) {
+			this.exprStack.push(expr);
+		}
 		
 		switch(expr.expr) {
 			case EBinop(op, e1, e2): {
@@ -279,37 +299,22 @@ class Await {
 				this.handleBlock(exprs);
 			}
 			case EFor(it, expr): {
-				if (preventStack == false) {
-					this.exprStack.push(expr);
-				}
 
 				this.handleFor(it, expr);
 			}
 			case EIf(econd, eif, eelse): {
-				if (preventStack == false) {
-					this.exprStack.push(expr);
-				}
-
 				this.handleIf(econd, eif, eelse);
 			}
 			case EMeta(s, e): {
 				this.handleMeta(s, e);
 			}
 			case ESwitch(e, cases, edef): {
-				if (preventStack == false) {
-					this.exprStack.push(expr);
-				}
-
 				this.handleSwitch(e, cases, edef);
 			}
 			case ETry(e, catches): {
 				this.handleTry(e, catches);
 			}
 			case EWhile(econd, e, normalWhile): {
-				if (preventStack == false) {
-					this.exprStack.push(expr);
-				}
-
 				this.handleWhile(econd, e, normalWhile);
 			}
 			case EVars(vars): {
@@ -691,6 +696,8 @@ class Await {
 			if (expr != null) {
 				switch (expr) {
 					case EMeta(s, e): {
+						this.exprStack.push(e2);
+
 						this.handleMeta(s, e);
 					}
 					default: {
@@ -720,6 +727,8 @@ class Await {
 			if (expr != null) {
 				switch (expr.expr) {
 					case EMeta(s, e): {
+						this.exprStack.push(expr);
+
 						this.handleMeta(s, e);
 					}
 					default: {
@@ -742,6 +751,8 @@ class Await {
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e2, p): {
+					this.exprStack.push(e);
+
 					for (expr in this.exprStack) {
 						this.callStack.push(expr);
 					}
@@ -763,6 +774,8 @@ class Await {
 
 	function handleCall(ce, p) {
 		var pos = ce.pos;
+
+		trace(this.getExprSummary(this.exprStack));
 
 		this.appendExpr({expr: EBlock([this.currentMetadataExpr]), pos: pos});
 
