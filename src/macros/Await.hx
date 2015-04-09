@@ -90,6 +90,9 @@ class Await {
 				case EFor(econd, expr): {
 					stack.push('For');
 				}
+				case ESwitch(e, cases, edef): {
+					stack.push('Switch');
+				}
 				case EWhile(econd, e, normalWhile): {
 					if (normalWhile) {
 						stack.push('While');
@@ -193,6 +196,19 @@ class Await {
 					}
 				}
 			}
+			case ESwitch(e, cases, edef): {
+				if (ignore.indexOf('Switch') == -1) {
+					for(c in cases) {
+						if (c.expr != null) {
+							result = result.concat(this.findExprs(c.expr, names, ignore));
+						}
+					}
+
+					if (edef != null) {
+						result = result.concat(this.findExprs(edef, names, ignore));
+					}
+				}
+			}
 			case ETry(e, catches): {
 				if (ignore.indexOf('Try') == -1) {
 					if (e != null) {
@@ -279,6 +295,13 @@ class Await {
 			case EMeta(s, e): {
 				this.handleMeta(s, e);
 			}
+			case ESwitch(e, cases, edef): {
+				if (preventStack == false) {
+					this.exprStack.push(expr);
+				}
+
+				this.handleSwitch(e, cases, edef);
+			}
 			case ETry(e, catches): {
 				this.handleTry(e, catches);
 			}
@@ -300,6 +323,76 @@ class Await {
 		this.exprStack = exprStack;
 
 		this.currentExpr = null;
+	}
+
+	function handleSwitch(e: Expr, cases: Array<Case>, edef) {
+		var currentBlock = this.currentBlock,
+			blocks = [];
+	
+		for (c in cases) {
+			var e = c.expr;
+
+			if (e != null) {
+				var newBlock = [];
+
+				this.currentBlock = newBlock;
+
+				this.handleExpr(e);
+
+				blocks.push(this.currentBlock);
+
+				e.expr = EBlock(newBlock);
+			}
+		}
+
+		if (edef != null) {
+			var newBlock = [];
+
+			this.currentBlock = newBlock;
+
+			this.handleExpr(edef);
+
+			blocks.push(this.currentBlock);
+
+			edef.expr = EBlock(newBlock);
+		}
+
+		this.currentBlock = currentBlock;
+
+		var isCalled = this.isCalled('Switch'),
+			newBlock;
+
+		if (isCalled) {
+			newBlock = [];
+
+			var newBlockExpr = {
+				expr: EBlock(newBlock),
+				pos: e.pos
+			};
+
+			this.appendExpr(macro var __after_switch = function () { $newBlockExpr; });
+
+			if (edef == null) {
+				var newDefaultBlock = [];
+
+				edef = {
+					expr: EBlock(newDefaultBlock),
+					pos: e.pos
+				};
+
+				blocks.push(newDefaultBlock);
+			}
+
+			for (block in blocks) {
+				block.push(macro __after_switch());
+			}
+		}
+
+		this.appendExpr({expr: ESwitch(e, cases, edef), pos: e.pos});
+
+		if (newBlock != null) {
+			this.currentBlock = newBlock;
+		}
 	}
 
 	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool) {
@@ -559,12 +652,7 @@ class Await {
 
 			this.currentBlock = newBlock;
 
-			switch (e.expr) {
-				case EBlock(exprs): {
-					this.handleBlock(exprs);
-				}
-				default:
-			}
+			this.handleExpr(e);
 
 			e.expr = EBlock(newBlock);
 		}
@@ -577,12 +665,7 @@ class Await {
 
 				this.currentBlock = newBlock;
 
-				switch (e.expr) {
-					case EBlock(exprs): {
-						this.handleBlock(exprs);
-					}
-					default:
-				}
+				this.handleExpr(e);
 
 				e.expr = EBlock(newBlock);
 			}

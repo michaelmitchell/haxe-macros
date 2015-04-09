@@ -17,51 +17,39 @@ class Main {
 
 	}
 
-	public static function foo(i: Int) {
+	public static function foo(a: Int, b: Int) {
 		trace('before all');
 
-		if (i == 1) {
-			trace(1);
-
-			@await bar(1);
-
-			while (i > 0) {
+		switch (a) {
+			case 1:
 				trace(1);
+			case 2:
+				switch (b) {
+					case 1:
+						trace(1);
+						do {
+							trace(a);	
 
-				if (i == 2) {
-					break;
+							if (a == 1) {
+								continue;
+							}
+
+							@await bar(1);
+
+							if (b == 1) {
+								break;
+							}
+
+							trace(b);
+						}
+						while (a < 0);
+
+						trace(1.1);
+					case 2:
+						trace(2);
 				}
-
-				do {
-					trace(1);
-
-					//@await bar(2);
-
-					if (i == 2) {
-						return;
-					}
-
-					if (i == 3) {
-						continue;
-					}
-					else {
-						break;
-					}
-				}
-				while (i < 0);
-
-				if (i == 3) {
-					continue;
-				}
-				
-				@await bar(1);
-
-				trace(2);
-			}
-
-			trace('after while');
-
-			return;
+			case 3:
+				trace(3);
 		}
 		
 		trace('after all');
