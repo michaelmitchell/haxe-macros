@@ -34,9 +34,7 @@ class Main {
 								continue;
 							}
 
-							var something;
-
-							something = @await bar(1);
+							var something = @await bar(1);
 
 							if (b == 1) {
 								break;

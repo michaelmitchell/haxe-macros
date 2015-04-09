@@ -84,6 +84,9 @@ class Await {
 				case EBlock(exprs): {
 					stack.push('Block');
 				}
+				case ECall({ expr: EConst(CIdent('Var')) }, params): {
+					stack.push('Var');
+				}
 				case ECall(e, params): {
 					stack.push('Call');
 				}
@@ -721,6 +724,8 @@ class Await {
 	function handleVars(vars:Array<Var>) {
 		for (v in vars) {
 			this.currentVar = v;
+
+			this.exprStack.push(macro Var($i{v.name}));
 			
 			var expr = v.expr;
 
