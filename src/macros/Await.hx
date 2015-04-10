@@ -206,6 +206,13 @@ class Await {
 					}
 				}
 			}
+			case EMeta(s, e): {
+				if (ignore.indexOf('Meta') == -1) {
+					if (e.expr != null) {
+						result = result.concat(this.findExprs(e, names, ignore));
+					}
+				}	
+			}
 			case ESwitch(e, cases, edef): {
 				if (ignore.indexOf('Switch') == -1) {
 					for(c in cases) {
@@ -296,12 +303,14 @@ class Await {
 			case EBlock(exprs): {
 				this.handleBlock(exprs);
 			}
-			case EFor(it, expr): {
-
-				this.handleFor(it, expr);
-			}
 			case EIf(econd, eif, eelse): {
 				this.handleIf(econd, eif, eelse);
+			}
+			case EFor(it, expr): {
+				this.handleFor(it, expr);
+			}
+			case EFunction(name, f): {
+				this.handleFunction(name, f);
 			}
 			case EMeta(s, e): {
 				this.handleMeta(s, e);
@@ -326,6 +335,24 @@ class Await {
 		this.exprStack = exprStack;
 
 		this.currentExpr = null;
+	}
+
+	function handleFunction(name, f) {
+		var currentBlock = this.currentBlock;
+
+		if (f.expr != null) {
+			var newBlock = [];
+
+			this.currentBlock = newBlock;
+
+			this.handleExpr(f.expr);
+
+			f.expr.expr = EBlock(newBlock);
+		}
+
+		this.currentBlock = currentBlock;
+
+		this.appendExpr({expr: EFunction(name, f), pos: f.expr.pos});
 	}
 
 	function handleSwitch(e: Expr, cases: Array<Case>, edef) {
@@ -681,7 +708,7 @@ class Await {
 						this.handleMeta(s, e);
 					}
 					default: {
-						this.appendExpr(this.currentExpr);
+						this.handleExpr(e2);
 					}
 				}
 			}
@@ -708,7 +735,7 @@ class Await {
 						this.handleMeta(s, e);
 					}
 					default: {
-						this.appendExpr(this.currentExpr);
+						this.handleExpr(expr);	
 					}
 				}
 			}
@@ -731,20 +758,18 @@ class Await {
 					this.handleCall(e2, p);
 				}
 				default: {
-					this.appendExpr(this.currentExpr);
+					this.handleExpr(e);
 				}
 			}
 		}
 		else {
-			this.appendExpr(this.currentExpr);
+			this.handleExpr(e);
 		}
 	}
 
 	function handleCall(ce, p) {
 		var exprs = this.getExprSummary(this.exprStack),
 			metaExpr = this.exprStack[exprs.lastIndexOf('Meta')];
-
-		trace(exprs);
 
 		this.appendExpr({expr: EBlock([metaExpr]), pos: ce.pos});
 
