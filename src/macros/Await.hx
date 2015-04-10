@@ -280,11 +280,16 @@ class Await {
 
 		this.currentExpr = expr;
 
-		if (preventStack == false) {
-			this.exprStack.push(expr);
+		// add exprs to stack but ignore certain exprs if needed
+		switch (expr.expr) {
+			default: {
+				if (preventStack == false) {
+					this.exprStack.push(expr);
+				}
+			}
 		}
 		
-		switch(expr.expr) {
+		switch (expr.expr) {
 			case EBinop(op, e1, e2): {
 				this.handleBinop(op, e1, e2);
 			}
@@ -738,6 +743,8 @@ class Await {
 	function handleCall(ce, p) {
 		var exprs = this.getExprSummary(this.exprStack),
 			metaExpr = this.exprStack[exprs.lastIndexOf('Meta')];
+
+		trace(exprs);
 
 		this.appendExpr({expr: EBlock([metaExpr]), pos: ce.pos});
 
