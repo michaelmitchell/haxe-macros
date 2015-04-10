@@ -15,11 +15,7 @@ class Await {
 
 	var currentExpr: Expr;
 
-	var field: Field;
-
 	var exprStack: Array<Expr> = [];
-
-	var method: Function;
 
 	var rootExpr: Expr;
 
@@ -32,7 +28,7 @@ class Await {
 			switch (field.kind) {
 				case FFun(method): {
 					if (method.expr != null) {
-						method = Await.transform(field, method);
+						method = Await.transform(method);
 					}
 				}
 				default:
@@ -42,18 +38,15 @@ class Await {
 		return fields;
 	}
 
-	static function transform(field:Field, method:haxe.macro.Function) {
-		var instance = new Await(field, method);
+	static function transform(method:haxe.macro.Function) {
+		var instance = new Await(method);
 
 		method.expr = instance.handleRootExpr();
 
 		return method;
 	}
 
-	function new(field:Field, method:haxe.macro.Function) {
-		this.field = field;
-		this.method = method;
-
+	function new(method:haxe.macro.Function) {
 		this.rootExpr = method.expr;
 		this.currentExpr = this.rootExpr;
 
@@ -80,6 +73,9 @@ class Await {
 				}
 				case EIf(econd, eif, eelse): {
 					stack.push('If');
+				}
+				case EFunction(name, f): {
+					stack.push('Function');
 				}
 				case EConst(CIdent('EElseIf')): {
 					stack.push('ElseIf');
@@ -338,19 +334,7 @@ class Await {
 	}
 
 	function handleFunction(name, f) {
-		var currentBlock = this.currentBlock;
-
-		if (f.expr != null) {
-			var newBlock = [];
-
-			this.currentBlock = newBlock;
-
-			this.handleExpr(f.expr);
-
-			f.expr.expr = EBlock(newBlock);
-		}
-
-		this.currentBlock = currentBlock;
+		f = Await.transform(f);
 
 		this.appendExpr({expr: EFunction(name, f), pos: f.expr.pos});
 	}

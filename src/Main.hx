@@ -40,8 +40,6 @@ class Main {
 								trace(2);
 							}
 
-							var something = @await bar(1);
-
 							function closure(a) {
 								if (a == 1) {
 									trace(1);
