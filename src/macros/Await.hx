@@ -9,33 +9,21 @@ import haxe.macro.Type;
 
 class Await {
 	#if macro
+	var callStack: Array<Expr> = [];
+
 	var currentBlock:Array<Expr>;
 
 	var currentExpr: Expr;
 
-	var currentBinop: Binop;
-	
-	var currentBinopExpr1: Expr;
-
-	var currentBinopExpr2: Expr;
-
-	var currentMetadataEntry: MetadataEntry;
-
-	var currentMetadataExpr: Expr;
-
-	var currentVar: Var;
-
 	var field: Field;
+
+	var exprStack: Array<Expr> = [];
 
 	var method: Function;
 
 	var rootExpr: Expr;
 
 	var rootBlock: Array<Expr>;
-
-	var exprStack: Array<Expr> = [];
-
-	var callStack: Array<Expr> = [];
 
 	public static function build() {
 		var fields = Context.getBuildFields();
@@ -84,7 +72,7 @@ class Await {
 				case EBlock(exprs): {
 					stack.push('Block');
 				}
-				case ECall({ expr: EConst(CIdent('Var')) }, params): {
+				case ECall({ expr: EConst(CIdent('EVar')) }, params): {
 					stack.push('Var');
 				}
 				case ECall(e, params): {
@@ -93,10 +81,10 @@ class Await {
 				case EIf(econd, eif, eelse): {
 					stack.push('If');
 				}
-				case EConst(CString('ElseIf')): {
+				case EConst(CIdent('EElseIf')): {
 					stack.push('ElseIf');
 				}
-				case EConst(CString('Else')): {
+				case EConst(CIdent('EElse')): {
 					stack.push('ElseIf');
 				}
 				case EFor(econd, expr): {
@@ -120,7 +108,6 @@ class Await {
 					}
 				}
 				default: {
-					trace(expr);
 					stack.push(null);
 				}
 			}
@@ -130,8 +117,8 @@ class Await {
 	}
 
 	function isCalled(exprName: String) {
-		var summary = this.getExprSummary(this.exprStack),
-			exprs = this.exprStack.slice(summary.lastIndexOf(exprName));
+		var exprSummary = this.getExprSummary(this.exprStack),
+			exprs = this.exprStack.slice(exprSummary.lastIndexOf(exprName));
 
 		for (expr in exprs) {
 			if (this.callStack.indexOf(expr) > -1) {
@@ -143,9 +130,9 @@ class Await {
 	}
 
 	function isInDo() {
-		var summary = this.getExprSummary(this.exprStack);
+		var exprs = this.getExprSummary(this.exprStack);
 
-		if (summary.indexOf('Do') != -1) {
+		if (exprs.indexOf('Do') != -1) {
 			return true;
 		}
 		
@@ -153,9 +140,9 @@ class Await {
 	}
 
 	function isInWhile() {
-		var summary = this.getExprSummary(this.exprStack);
+		var exprs = this.getExprSummary(this.exprStack);
 
-		if (summary.indexOf('While') != -1) {
+		if (exprs.indexOf('While') != -1) {
 			return true;
 		}
 		
@@ -167,8 +154,12 @@ class Await {
 			lastExpr = exprStack[exprStack.length - 1];
 
 		var isRootIf = switch (lastExpr.expr) {
-			case EIf(econd, eif, eelse): true;
-			default: false;
+			case EIf(econd, eif, eelse): {
+				true;
+			}
+			default: {
+				false;
+			}
 		}
 
 		return isRootIf;
@@ -254,8 +245,10 @@ class Await {
 		return result;
 	}
 
-	function handleRootExpr() {
-		var expr = this.rootExpr;
+	function handleRootExpr(?expr) {
+		if (expr == null) {
+			expr = this.rootExpr;
+		}
 
 		this.currentExpr = expr;
 
@@ -273,10 +266,7 @@ class Await {
 				this.appendExpr(expr);
 		}
 
-		return {
-			expr: EBlock(this.rootBlock),
-			pos: expr.pos
-		};
+		return {expr: EBlock(this.rootBlock), pos: expr.pos};
 	}
 
 	function handleBlock(exprs:Array<Expr>, isRoot: Bool = false) {
@@ -383,10 +373,7 @@ class Await {
 			if (edef == null) {
 				var newDefaultBlock = [];
 
-				edef = {
-					expr: EBlock(newDefaultBlock),
-					pos: e.pos
-				};
+				edef = {expr: EBlock(newDefaultBlock), pos: e.pos};
 
 				blocks.push(newDefaultBlock);
 			}
@@ -427,14 +414,9 @@ class Await {
 		var isCalled = this.isCalled(normalWhile ? 'While' : 'Do');
 
 		if (isCalled) {
-			var newBlock = [];
-
-			var newBlockExpr = {
-				expr: EBlock(newBlock),
-				pos: econd.pos
-			};
-			
-			var	expr;
+			var newBlock = [],
+				newBlockExpr = {expr: EBlock(newBlock),	pos: econd.pos},
+				expr;
 
 			if (normalWhile) {
 				var method = macro var __after_while = function () { $newBlockExpr; };
@@ -588,10 +570,10 @@ class Await {
 
 			switch (eelse.expr) {
 				case EIf(econd, eif, eelse): {
-					this.exprStack.push(macro 'ElseIf');
+					this.exprStack.push(macro EElseIf);
 				}
 				default: {
-					this.exprStack.push(macro 'Else');
+					this.exprStack.push(macro EElse);
 
 					isElse = true;
 				}
@@ -618,10 +600,7 @@ class Await {
 			if (isRootIf) {	
 				newBlock = [];
 
-				var newBlockExpr = {
-					expr: EBlock(newBlock),
-					pos: econd.pos
-				};
+				var newBlockExpr = {expr: EBlock(newBlock),	pos: econd.pos};
 
 				this.appendExpr(macro var __after_if = function () { $newBlockExpr; });
 			}
@@ -682,18 +661,11 @@ class Await {
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		this.appendExpr({
-			expr: ETry(e, catches),
-			pos: e.pos
-		});
+		this.appendExpr({expr: ETry(e, catches), pos: e.pos});
 	}
 
 	function handleBinop(op, e1, e2) {
 		if (op == OpAssign) {
-			this.currentBinop = op;
-			this.currentBinopExpr1 = e1;
-			this.currentBinopExpr2 = e2;
-
 			var expr = e2.expr;
 
 			if (expr != null) {
@@ -711,10 +683,6 @@ class Await {
 			else {
 				this.appendExpr(this.currentExpr);
 			}
-
-			this.currentBinop = null;
-			this.currentBinopExpr1 = null;
-			this.currentBinopExpr2 = null;
 		}
 		else {
 			this.appendExpr(this.currentExpr);
@@ -723,9 +691,7 @@ class Await {
 
 	function handleVars(vars:Array<Var>) {
 		for (v in vars) {
-			this.currentVar = v;
-
-			this.exprStack.push(macro Var($i{v.name}));
+			this.exprStack.push(macro EVar($i{v.name}));
 			
 			var expr = v.expr;
 
@@ -744,15 +710,10 @@ class Await {
 			else {
 				this.appendExpr(this.currentExpr);
 			}
-			
-			this.currentVar = null;
 		}
 	}
 
 	function handleMeta(s, e) {
-		this.currentMetadataEntry = s;
-		this.currentMetadataExpr = e;
-
 		if (s.name == 'await') {
 			switch (e.expr) {
 				case ECall(e2, p): {
@@ -772,64 +733,55 @@ class Await {
 		else {
 			this.appendExpr(this.currentExpr);
 		}
-
-		this.currentMetadataEntry = null;
-		this.currentMetadataExpr = null;
 	}
 
 	function handleCall(ce, p) {
-		var pos = ce.pos;
+		var exprs = this.getExprSummary(this.exprStack),
+			metaExpr = this.exprStack[exprs.lastIndexOf('Meta')];
 
-		trace(this.getExprSummary(this.exprStack));
+		this.appendExpr({expr: EBlock([metaExpr]), pos: ce.pos});
 
-		this.appendExpr({expr: EBlock([this.currentMetadataExpr]), pos: pos});
-
-		// create write block
-		var binopExpr1 = this.currentBinopExpr1,
-			currentVar = this.currentVar,
+		var binopExpr = this.exprStack[exprs.lastIndexOf('Binop')],
+			varExpr = this.exprStack[exprs.lastIndexOf('Var')],
 			name;
 
 		//work out the name of assignment if any
-		if (binopExpr1 != null) {
-			name = switch (binopExpr1.expr) {
-				case EConst(CIdent(s)): {
-					s;
+		if (binopExpr != null) {
+			switch (binopExpr.expr) {
+				case EBinop(op, e1, e2): {
+					switch (e1.expr) {
+						case EConst(CIdent(s)): {
+							name = s;
+						}
+						default:
+					}
 				}
-				default: {
-					null;
-				}
+				default:
 			}
 		}
-		else if (currentVar != null) {
-			name = 'var ' + currentVar.name;
+		else if (varExpr != null) {
+			switch (varExpr.expr) {
+				case ECall({ expr: EConst(CIdent('EVar')) }, [{ expr: EConst(CIdent(s)) }]): {
+					name = 'var ' + s;
+				}
+				default:
+			}
 		}
-		
-		var method = macro function(__error, __result) {};
+
+		var newBlock = [],
+			newExprBlock = {expr: EBlock(newBlock), pos: ce.pos},
+			method = macro function(__error, __result) { $newExprBlock; };
 
 		p.push(method);
 
-		// the new root block inside the callback function
-		var newBlock = [];
-
 		// add assignment if there is one...
 		if (name != null) {
-			var opAssign =  Context.parse(name + ' = __result', pos);
+			var opAssign =  Context.parse(name + ' = __result', ce.pos);
 
 			newBlock.push(opAssign);
 		}
 
-		switch (method.expr) {
-			case EFunction(name, fe): {
-				// replace new methods block with new write target
-				fe.expr = {
-					expr: EBlock(newBlock),
-					pos: pos
-				};
-
-				this.currentBlock = newBlock;
-			}
-			default:
-		}
+		this.currentBlock = newBlock;
 	}
 
 	function appendExpr(expr:Expr) {

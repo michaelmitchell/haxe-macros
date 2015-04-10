@@ -33,8 +33,16 @@ class Main {
 							if (a == 1) {
 								continue;
 							}
+							else if (a == 2) {
+								trace(1);
+							}
+							else {
+								trace(2);
+							}
 
-							var something = @await bar(1);
+							var something;
+
+							something = @await bar(1);
 
 							if (b == 1) {
 								break;
