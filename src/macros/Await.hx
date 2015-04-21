@@ -74,9 +74,6 @@ class Await {
 				case EIf(econd, eif, eelse): {
 					stack.push('If');
 				}
-				case EFunction(name, f): {
-					stack.push('Function');
-				}
 				case EConst(CIdent('EElseIf')): {
 					stack.push('ElseIf');
 				}
@@ -88,6 +85,9 @@ class Await {
 				}
 				case EMeta(s, e): {
 					stack.push('Meta');
+				}
+				case ETry(e, catches): {
+					stack.push('Try');
 				}
 				case EVars(vars): {
 					stack.push('Vars');
@@ -122,6 +122,26 @@ class Await {
 			}
 		}
 
+		return false;
+	}
+
+	function isNestedTry() {
+		var exprs = this.getExprSummary(this.exprStack);
+		
+		if (exprs.lastIndexOf('Try') > exprs.indexOf('Try')) {
+			return true;
+		}
+		
+		return false;
+	}
+
+	function isInTry() {
+		var exprs = this.getExprSummary(this.exprStack);
+
+		if (exprs.indexOf('Try') != -1) {
+			return true;
+		}
+		
 		return false;
 	}
 
@@ -182,6 +202,15 @@ class Await {
 			case EContinue: {
 				if (names.indexOf('Continue') != -1) {
 					result.push(ein);
+				}
+			}
+			case EThrow(e): {
+				if (names.indexOf('Throw') != -1) {
+					result.push(ein);
+
+					if (e != null) {
+						result = result.concat(this.findExprs(e, names, ignore));
+					}
 				}
 			}
 			case EFor(it, expr): {
@@ -648,16 +677,20 @@ class Await {
 	}
 
 	function handleTry(e, catches: Array<Catch>) {
-		var currentBlock = this.currentBlock;
+		var currentBlock = this.currentBlock,
+			tryBlock = [],
+			controlExprs, block;
 
 		if (e != null) {
-			var newBlock = [];
+			controlExprs = this.findExprs(e, ['Throw']);
 
-			this.currentBlock = newBlock;
+			this.currentBlock = tryBlock;
 
 			this.handleExpr(e);
 
-			e.expr = EBlock(newBlock);
+			block = this.currentBlock;
+
+			e.expr = EBlock(tryBlock);
 		}
 
 		for (c in catches) {
@@ -677,7 +710,76 @@ class Await {
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		this.appendExpr({expr: ETry(e, catches), pos: e.pos});
+		var isCalled = this.isCalled('Try');
+
+		if (isCalled) {
+			var newBlock = [],
+				newBlockExpr = {expr: EBlock(newBlock),	pos: e.pos};
+
+			this.appendExpr(macro var __after_catch = function () { $newBlockExpr; });
+
+			var catchBlock = [],
+				catchBlockExpr = {expr: EBlock(catchBlock), pos: e.pos},
+				nextBlock = catchBlock;
+
+			for (c in catches) {
+				var exceptionType = switch (c.type) {
+					case TPath({name: result}): result;
+					default: null;
+				}
+
+				var varName = c.name,
+					catchExpr = c.expr;
+			
+				var expr = macro {
+					if (Std.is(__exception, $i{exceptionType})) {
+						var $varName = __exception;
+						$catchExpr;
+						__after_catch();
+					}
+				}
+
+				switch (expr.expr) {
+					case EBlock([{expr: EIf(econd, eif, eelse)}]): {
+						var elseBlock = [];
+
+						nextBlock.push({expr: EIf(econd, eif, {expr: EBlock(elseBlock), pos: expr.pos}), pos: expr.pos});
+
+						nextBlock = elseBlock;
+					}
+					default:
+				}
+			}
+
+			this.appendExpr(macro var __catch = function (__exception) { $catchBlockExpr; });
+
+			for (expr in controlExprs) {
+				var newExpr = switch (expr.expr) {
+					case EThrow(e):
+						macro { __catch($e); return; };
+					default:
+						expr;
+				}
+
+				expr.expr = newExpr.expr;
+			}
+
+			if (this.isNestedTry()) {
+				nextBlock.push(macro __catch(__exception));
+			}
+			else {
+				nextBlock.push(macro throw __exception);
+			}
+			
+			this.appendExpr({expr: EBlock(tryBlock), pos: e.pos});
+
+			block.push(macro __after_catch());
+
+			this.currentBlock = newBlock;
+		}
+		else {
+			this.appendExpr({expr: ETry(e, catches), pos: e.pos});
+		}
 	}
 
 	function handleBinop(op, e1, e2) {
@@ -786,7 +888,28 @@ class Await {
 
 		var newBlock = [],
 			newExprBlock = {expr: EBlock(newBlock), pos: ce.pos},
-			method = macro function(__error, __result) { $newExprBlock; };
+			method;
+
+		if (this.isInTry()) {
+			method = macro function(__error, __result) {
+				if (__error != null) {
+					__catch(__error);
+					return;
+				}
+
+				$newExprBlock; 
+			};
+		}
+		else {
+			method = macro function(__error, __result) {
+				if (__error != null) {
+					throw __error;
+					return;
+				}
+
+				$newExprBlock; 
+			};
+		}
 
 		p.push(method);
 
