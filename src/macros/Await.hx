@@ -501,7 +501,7 @@ class Await {
 		}
 	}
 
-	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool) {
+	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool, ?isFork = false) {
 		var currentBlock = this.currentBlock,
 			controlExprs = [],
 			block;
@@ -535,6 +535,7 @@ class Await {
 				//async while
 				expr = macro {
 					$method;
+
 					var __while = null;
 
 					__while = function () {
@@ -566,6 +567,7 @@ class Await {
 				// async do 
 				expr = macro {
 					$method;
+
 					var __do = null; 
 					
 					__do = function () {
@@ -607,7 +609,7 @@ class Await {
 		}
 	}
 
-	function handleFor(it, expr) {
+	function handleFor(it, expr, ?isFork = false) {
 		switch(it.expr) {
 			case EIn(e1, e2): {
 				var name = switch (e1.expr) {
@@ -641,15 +643,23 @@ class Await {
 					pos: it.pos
 				};
 
+				this.appendExpr(macro var __iterator = $toIteratorExpr);
+
 				var expr = macro {
-					var __iterator = $toIteratorExpr;
 					while ($hasNextExpr) {
 						var $name = $nextExpr;
 						$expr;
 					}
 				};
 
-				this.handleExpr(expr, true);
+				switch (expr.expr) {
+					case EBlock([{expr: EWhile(econd, e, normalWhile)}]): {
+						this.handleWhile(econd, e, normalWhile, isFork);
+					}
+					default: {
+						Context.error('This shouldn\'t happen...', expr.pos);
+					}
+				}
 			}
 			default: 
 				this.appendExpr(this.currentExpr);
@@ -942,6 +952,16 @@ class Await {
 				}
 				default: {
 					Context.error('Invalid use of await', e.pos);
+				}
+			}
+		}
+		else if (s.name == 'fork') {
+			switch (e.expr) {
+				case EFor(it, expr): {
+					this.handleFor(it, expr, true);
+				}
+				default: {
+					Context.error('Invalid use of fork', e.pos);
 				}
 			}
 		}

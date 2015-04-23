@@ -21,6 +21,10 @@ class Main {
 				trace(x);
 			}
 
+			@fork for (i in 0...10) {
+				@await bar(i);
+			}
+
 			trace(1);
 		}
 		catch (e: String) {
