@@ -276,9 +276,7 @@ class Await {
 					result = result.concat(this.findExprs(v.expr, names, ignore));
 				}
 			}
-
 			default:
-				trace(ein);
 		}
 
 		return result;
@@ -929,7 +927,7 @@ class Await {
 	}
 
 	function handleMeta(s, e) {
-		if (s.name == 'await') {
+		if (s.name == 'await' || s.name == 'pwait') {
 			switch (e.expr) {
 				case ECall(e2, p): {
 					this.exprStack.push(e);
@@ -938,7 +936,7 @@ class Await {
 						this.callStack.push(expr);
 					}
 
-					this.handleCall(e2, p);
+					this.handleCall(e2, p, s.name == 'pwait');
 
 					return true;
 				}
@@ -954,11 +952,9 @@ class Await {
 		return false;
 	}
 
-	function handleCall(ce, p) {
+	function handleCall(ce, p, ?isPromise = false) {
 		var exprs = this.getExprSummary(this.exprStack),
 			metaExpr = this.exprStack[exprs.lastIndexOf('Meta')];
-
-		this.appendExpr({expr: EBlock([metaExpr]), pos: ce.pos});
 
 		var binopIdx = exprs.lastIndexOf('Binop'),
 			binopExpr;
@@ -999,28 +995,50 @@ class Await {
 			newExprBlock = {expr: EBlock(newBlock), pos: ce.pos},
 			method;
 
-		if (this.isInTry()) {
-			method = macro function(__error, __result) {
-				if (__error != null) {
-					__catch(__error);
-					return;
-				}
+		if (!isPromise) {
+			if (this.isInTry()) {
+				method = macro function(__error, __result) {
+					if (__error != null) {
+						__catch(__error);
+						return;
+					}
 
-				$newExprBlock; 
-			};
+					$newExprBlock; 
+				};
+			}
+			else {
+				method = macro function(__error, __result) {
+					if (__error != null) {
+						throw __error;
+						return;
+					}
+
+					$newExprBlock; 
+				};
+			}
+
+			p.push(method);
 		}
 		else {
-			method = macro function(__error, __result) {
-				if (__error != null) {
-					throw __error;
-					return;
-				}
-
-				$newExprBlock; 
-			};
+			if (this.isInTry()) {
+				metaExpr = macro {
+					$metaExpr.then(function (__result) {
+						$newExprBlock;
+					}, function (__error) {
+						__catch(__error);
+					});
+				};
+			}
+			else {
+				metaExpr = macro {
+					$metaExpr.then(function (__result) {
+						$newExprBlock;
+					}, function (__error) {
+						throw __error;
+					});
+				};
+			}
 		}
-
-		p.push(method);
 
 		// add assignment if there is one...
 		if (name != null) {
@@ -1028,6 +1046,8 @@ class Await {
 
 			newBlock.push(opAssign);
 		}
+
+		this.appendExpr({expr: EBlock([metaExpr]), pos: ce.pos});
 
 		this.currentBlock = newBlock;
 	}

@@ -8,36 +8,32 @@ class Main {
 	static function main() {}
 
 	public static function foo(i: Int) {
-		trace(1);
-
 		try {
-			var x = switch (i) {
-				case 1: 2;
-				case 2: {
-					if (i == 1) {
-						throw "hello";
-					}
+			trace(1);
 
-					var a = @await bar(i);
+			@await bar(i);
 
-					trace(a);
+			trace(2);
 
-					3;
-				}
-				default: {
-					@await bar(i);
-				};
+			if (i == 1) {
+				var x = @pwait bar(i);
+
+				trace(x);
 			}
+
+			trace(1);
 		}
-		catch (e: Error) {
+		catch (e: String) {
 			trace(e);
 		}
-
-		trace(2);
+		
+		trace('after catching');
 	}
 
 	public static function bar(i: Int, ?__return) {
-		return i;
+		var defer = Q.defer();
+
+		return defer.promise;
 	}
 
 }
