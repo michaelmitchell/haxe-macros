@@ -294,17 +294,12 @@ class Await {
 					this.handleExpr(expr);
 				}
 			}
-			default:
+			default: {
 				this.appendExpr(expr);
+			}
 		}
 
 		return {expr: EBlock(this.rootBlock), pos: expr.pos};
-	}
-
-	function handleBlock(exprs:Array<Expr>, isRoot: Bool = false) {
-		for (expr in exprs) {
-			this.handleExpr(expr);
-		}
 	}
 
 	function handleExpr(expr: Expr, preventStack: Bool = false) {
@@ -362,6 +357,12 @@ class Await {
 		this.currentExpr = null;
 	}
 
+	function handleBlock(exprs:Array<Expr>, isRoot: Bool = false) {
+		for (expr in exprs) {
+			this.handleExpr(expr);
+		}
+	}
+
 	function handleFunction(name, f) {
 		f = Await.transform(f);
 
@@ -369,6 +370,30 @@ class Await {
 	}
 
 	function handleSwitch(e: Expr, cases: Array<Case>, edef) {
+		var exprs = this.getExprSummary(this.exprStack),
+			binopExpr = this.exprStack[exprs.lastIndexOf('Binop')],
+			varExpr = this.exprStack[exprs.lastIndexOf('Var')],
+			varName;
+		
+		if (binopExpr != null) {
+			switch (binopExpr.expr) {
+				case EBinop(op, {expr: EConst(CIdent(s))}, e2): {
+					varName = s;
+				}
+				default:
+			}
+		}
+		else if (varExpr != null) {
+			switch (varExpr.expr) {
+				case ECall({ expr: EConst(CIdent('EVar')) }, [{ expr: EConst(CIdent(s)) }]): {
+					varName = s;
+
+					this.appendExpr(Context.parse('var ' + s, e.pos));
+				}
+				default:
+			}
+		}
+
 		var currentBlock = this.currentBlock,
 			blocks = [];
 	
@@ -379,6 +404,25 @@ class Await {
 				var newBlock = [];
 
 				this.currentBlock = newBlock;
+
+				if (varName != null) {
+					var block = [],
+						lastExpr;
+
+					switch (e.expr) {
+						case EBlock([{expr: EBlock(exprs)}]):
+							lastExpr = exprs.splice(exprs.length - 1, 1)[0];
+							block = exprs;
+						case EBlock(exprs):
+							lastExpr = exprs.splice(exprs.length - 1, 1)[0];
+							block = exprs;
+						default:
+					}
+
+					lastExpr = macro { $i{varName} = $lastExpr; };
+
+					block.push(lastExpr);
+				}
 
 				this.handleExpr(e);
 
@@ -392,6 +436,25 @@ class Await {
 			var newBlock = [];
 
 			this.currentBlock = newBlock;
+
+			if (varName != null) {
+				var block = [],
+					lastExpr;
+
+				switch (edef.expr) {
+					case EBlock([{expr: EBlock(exprs)}]):
+						block = exprs;
+						lastExpr = exprs.splice(exprs.length - 1, 1)[0];
+					case EBlock(exprs):
+						block = exprs;
+						lastExpr = exprs.splice(exprs.length - 1, 1)[0];
+					default:
+				}
+
+				lastExpr = macro { $i{varName} = $lastExpr; };
+
+				block.push(lastExpr);
+			}
 
 			this.handleExpr(edef);
 
@@ -793,8 +856,18 @@ class Await {
 
 						this.handleMeta(s, e);
 					}
+					case EFunction(name, f): {
+						f = Await.transform(f);
+
+						e2.expr = EFunction(name, f);
+						
+						this.appendExpr({expr: EBinop(op, e1, e2), pos: e2.pos});
+					}
+					case ESwitch(e, cases, edef): {
+						this.handleSwitch(e, cases, edef);
+					}
 					default: {
-						this.handleExpr(e2);
+						this.appendExpr(this.currentExpr);
 					}
 				}
 			}
@@ -808,6 +881,9 @@ class Await {
 	}
 
 	function handleVars(vars:Array<Var>) {
+		var newVars = [],
+			newBlock;
+
 		for (v in vars) {
 			this.exprStack.push(macro EVar($i{v.name}));
 			
@@ -820,14 +896,30 @@ class Await {
 
 						this.handleMeta(s, e);
 					}
+					case EFunction(name, f): {
+						f = Await.transform(f);
+
+						v.expr = {expr: EFunction(name, f), pos: f.expr.pos};
+						
+						newVars.push(v);
+					}
+					case ESwitch(e, cases, edef): {
+						this.handleSwitch(e, cases, edef);
+					}
 					default: {
-						this.handleExpr(expr);	
+						newVars.push(v);
 					}
 				}
 			}
 			else {
-				this.appendExpr(this.currentExpr);
+				newVars.push(v);
 			}
+		}
+
+		this.appendExpr({expr: EVars(newVars), pos: Context.currentPos()});
+
+		if (newBlock != null) {
+			this.currentBlock = newBlock;
 		}
 	}
 
@@ -842,15 +934,19 @@ class Await {
 					}
 
 					this.handleCall(e2, p);
+
+					return true;
 				}
 				default: {
-					this.handleExpr(e);
+					Context.error('Invalid use of await', e.pos);
 				}
 			}
 		}
 		else {
 			this.handleExpr(e);
 		}
+
+		return false;
 	}
 
 	function handleCall(ce, p) {
@@ -859,20 +955,28 @@ class Await {
 
 		this.appendExpr({expr: EBlock([metaExpr]), pos: ce.pos});
 
-		var binopExpr = this.exprStack[exprs.lastIndexOf('Binop')],
-			varExpr = this.exprStack[exprs.lastIndexOf('Var')],
-			name;
+		var binopIdx = exprs.lastIndexOf('Binop'),
+			binopExpr;
+
+		// binop and var should be exactly 2 behind otherwise the last was from something else...
+		if (binopIdx == exprs.length - 3) {
+			binopExpr = this.exprStack[binopIdx];
+		}
+
+		var varIdx = exprs.lastIndexOf('Var'),
+			varExpr;
+
+		if (varIdx == exprs.length - 3) {
+			varExpr = this.exprStack[varIdx];
+		}
+
+		var name;
 
 		//work out the name of assignment if any
 		if (binopExpr != null) {
 			switch (binopExpr.expr) {
-				case EBinop(op, e1, e2): {
-					switch (e1.expr) {
-						case EConst(CIdent(s)): {
-							name = s;
-						}
-						default:
-					}
+				case EBinop(op, {expr: EConst(CIdent(s))}, e2): {
+					name = s;
 				}
 				default:
 			}
