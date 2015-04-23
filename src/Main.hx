@@ -10,10 +10,27 @@ class Main {
 	public static function foo(i: Int) {
 		trace(1);
 
-		var x = switch (i) {
-			case 1: 2;
-			case 2: 3;
-			default: 0;
+		try {
+			var x = switch (i) {
+				case 1: 2;
+				case 2: {
+					if (i == 1) {
+						throw "hello";
+					}
+
+					var a = @await bar(i);
+
+					trace(a);
+
+					3;
+				}
+				default: {
+					@await bar(i);
+				};
+			}
+		}
+		catch (e: Error) {
+			trace(e);
 		}
 
 		trace(2);

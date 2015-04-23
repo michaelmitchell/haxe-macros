@@ -271,16 +271,21 @@ class Await {
 					}
 				}
 			}
+			case EVars(vars): {
+				for (v in vars) {
+					result = result.concat(this.findExprs(v.expr, names, ignore));
+				}
+			}
+
 			default:
+				trace(ein);
 		}
 
 		return result;
 	}
 
-	function handleRootExpr(?expr) {
-		if (expr == null) {
-			expr = this.rootExpr;
-		}
+	function handleRootExpr() {
+		var expr = this.rootExpr;
 
 		this.currentExpr = expr;
 
@@ -443,11 +448,11 @@ class Await {
 
 				switch (edef.expr) {
 					case EBlock([{expr: EBlock(exprs)}]):
-						block = exprs;
 						lastExpr = exprs.splice(exprs.length - 1, 1)[0];
+						block = exprs;
 					case EBlock(exprs):
-						block = exprs;
 						lastExpr = exprs.splice(exprs.length - 1, 1)[0];
+						block = exprs;
 					default:
 				}
 
