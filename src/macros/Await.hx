@@ -311,7 +311,9 @@ class Await {
 			}
 		}
 
-		return {expr: EBlock(this.rootBlock), pos: expr.pos};
+		var newExpr = {expr: EBlock(this.rootBlock), pos: expr.pos};
+
+		return newExpr;
 	}
 
 	function handleExpr(expr: Expr, preventStack: Bool = false) {
@@ -1157,8 +1159,8 @@ class Await {
 							name: "Dynamic",
 							pack: [],
 							sub: null,
-							params: [],
-						})),
+							params: []
+						}))
 					]
 				})),
 				pos: Context.currentPos()

@@ -7,12 +7,10 @@ class Main {
 
 	public static function foo(i: Int) {
 		if (i == 2) {
-			var fn = function () {
+			var fn = function() {
 				return 1;
 			};
 		}
-
-		//trace(a);
 	}
 
 }
