@@ -2,29 +2,28 @@ package macros;
 
 import haxe.macro.Context;
 import haxe.macro.Expr;
-import haxe.macro.ExprTools;
 
 class Async {
 
-	var field:Field;
+	var field: Field;
 
-	var method:Function;
+	var method: Function;
 
-	var metadata:Metadata;
+	var metadata: Metadata;
 
-	var rootExpr:Expr;
+	var rootExpr: Expr;
 
-	var rootBlock:Array<Expr>;
+	var rootBlock: Array<Expr>;
 
-	var currentBlock:Array<Expr>;
+	var currentBlock: Array<Expr>;
 
-	var currentExpr:Expr;
+	var currentExpr: Expr;
 
-	var returnType:ComplexType;
+	var returnType: ComplexType;
 
-	var isReturned:Bool = false;
+	var isReturned: Bool = false;
 
-	var isInTry:Bool = false;
+	var isInTry: Bool = false;
 
 	static function build() {
 		var fields = Context.getBuildFields();
@@ -42,7 +41,7 @@ class Async {
 		return fields;
 	}
 
-	static function run(field:Field, method:haxe.macro.Function) {
+	static function run(field: Field, method: haxe.macro.Function) {
 		var instance = new Async(field, method);
 
 		for (metadata in field.meta) {
@@ -54,7 +53,7 @@ class Async {
 		return method;
 	}
 
-	function new(field:Field, method:haxe.macro.Function) {
+	function new(field: Field, method: haxe.macro.Function) {
 		this.field = field;
 		this.method = method;
 		this.metadata = field.meta;
@@ -66,7 +65,7 @@ class Async {
 		this.currentBlock = this.rootBlock;
 	}
 
-	function handleBlock(exprs:Array<Expr>) {
+	function handleBlock(exprs: Array<Expr>) {
 		var i = 0;
 
 		for (expr in exprs) {
@@ -215,7 +214,7 @@ class Async {
 
 			edef.expr = EBlock(newBlock);
 		}
-		
+
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
@@ -242,7 +241,7 @@ class Async {
 
 			e.expr = EBlock(newBlock);
 		}
-	
+
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
@@ -269,7 +268,7 @@ class Async {
 
 			expr.expr = EBlock(newBlock);
 		}
-	
+
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
@@ -312,7 +311,7 @@ class Async {
 
 				default:
 			}
-			
+
 			eelse.expr = EBlock(newElseBlock);
 		}
 
@@ -385,24 +384,24 @@ class Async {
 
 		//remove return type requirement
 		this.method.ret = null;
-		
+
 		var type = null;
 
 		//@TODO Fix this?
 		// apply return type to callback function for type checking
 		if (this.returnType != null) {
 			type = TFunction([
-					TPath({name: null, pack: []}),
-					this.returnType
-				],
-				TPath({name: 'Void', pack: []})
+				TPath({name: null, pack: []}),
+				this.returnType
+			],
+			TPath({name: 'Void', pack: []})
 			);
 		}
 
 		// add callback to method as last argument
 		this.method.args.push({
 			name: '__return',
-			type: type 
+			type: type
 		});
 
 		var expr = this.rootExpr;
@@ -424,7 +423,7 @@ class Async {
 		};
 	}
 
-	function append(expr:Expr) {
+	function append(expr: Expr) {
 		this.currentBlock.push(expr);
 	}
 

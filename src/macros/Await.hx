@@ -24,6 +24,12 @@ class Await {
 
 	var field: Field;
 
+	var returnType: ComplexType;
+
+	var isAsync: Bool = false;
+
+	var isReturned: Bool = false;
+
 	public static function build() {
 		var fields = Context.getBuildFields();
 
@@ -58,6 +64,37 @@ class Await {
 
 		this.rootBlock = [];
 		this.currentBlock = this.rootBlock;
+
+		for (m in field.meta) {
+			if (m.name == 'async') {
+				this.isAsync = true;
+			}
+		}
+
+		if (this.isAsync) {
+			// cache return type to apply to callback value
+			var returnType: ComplexType = method.ret;
+
+			//remove return type requirement
+			this.method.ret = null;
+
+			var type: ComplexType = null;
+
+			// apply return type to callback function for type checking
+			if (returnType != null) {
+				type = TFunction([
+					TPath({name: null, pack: []}),
+					returnType
+				], TPath({name: 'Void', pack: []}));
+			}
+
+			// add callback to method as last argument
+			this.method.args.push({
+				name: '__return',
+				type: type,
+				opt: true
+			});
+		}
 	}
 
 	function getExprSummary(exprs: Array<Expr>): Array<String> {
@@ -122,8 +159,8 @@ class Await {
 	}
 
 	function isCalled(exprName: String) {
-		var exprSummary = this.getExprSummary(this.exprStack),
-			exprs = this.exprStack.slice(exprSummary.lastIndexOf(exprName));
+		var exprSummary = this.getExprSummary(this.exprStack);
+		var exprs = this.exprStack.slice(exprSummary.lastIndexOf(exprName));
 
 		for (expr in exprs) {
 			if (this.callStack.indexOf(expr) > -1) {
@@ -175,8 +212,8 @@ class Await {
 	}
 
 	function isRootIf() {
-		var exprStack = this.exprStack,
-			lastExpr = exprStack[exprStack.length - 1];
+		var exprStack = this.exprStack;
+		var lastExpr = exprStack[exprStack.length - 1];
 
 		var isRootIf = switch (lastExpr.expr) {
 			case EIf(econd, eif, eelse): {
@@ -311,6 +348,13 @@ class Await {
 			}
 		}
 
+		if (this.isAsync && !this.isReturned) {
+			this.appendExpr(macro {
+				__return(null, null);
+				return;
+			});
+		}
+
 		var newExpr = {expr: EBlock(this.rootBlock), pos: expr.pos};
 
 		return newExpr;
@@ -349,8 +393,14 @@ class Await {
 			case EMeta(s, e): {
 				this.handleMeta(s, e);
 			}
+			case EReturn(e): {
+				this.handleReturn(e);
+			}
 			case ESwitch(e, cases, edef): {
 				this.handleSwitch(e, cases, edef);
+			}
+			case EThrow(e): {
+				this.handleThrow(e);
 			}
 			case ETry(e, catches): {
 				this.handleTry(e, catches);
@@ -362,6 +412,8 @@ class Await {
 				this.handleVars(vars);
 			}
 			default: {
+				trace(expr);
+
 				this.appendExpr(this.currentExpr);
 			}
 		}
@@ -374,6 +426,27 @@ class Await {
 	function handleBlock(exprs:Array<Expr>, isRoot: Bool = false) {
 		for (expr in exprs) {
 			this.handleExpr(expr);
+		}
+
+		this.isReturned = false;
+	}
+
+	function handleReturn(e) {
+		if (this.isAsync) {
+			if (!this.isReturned) {
+				this.appendExpr(macro {
+					__return(null, $e);
+					return;
+				});
+
+				this.isReturned = true;
+			}
+			else {
+				Context.error('Unreachable callback', e.pos);
+			}
+		}
+		else {
+			this.appendExpr(this.currentExpr);
 		}
 	}
 
@@ -886,7 +959,12 @@ class Await {
 				nextBlock.push(macro __catch(__exception));
 			}
 			else {
-				nextBlock.push(macro throw __exception);
+				if (this.isAsync) {
+					nextBlock.push(macro __return(__exception, null));
+				}
+				else {
+					nextBlock.push(macro throw __exception);
+				}
 			}
 
 			this.appendExpr({expr: EBlock(tryBlock), pos: e.pos});
