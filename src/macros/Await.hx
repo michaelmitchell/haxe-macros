@@ -3,7 +3,6 @@ package macros;
 #if macro
 import haxe.macro.Context;
 import haxe.macro.Expr;
-import haxe.macro.ExprTools;
 import haxe.macro.Type;
 #end
 
@@ -21,6 +20,10 @@ class Await {
 
 	var rootBlock: Array<Expr>;
 
+	var method: Function;
+
+	var field: Field;
+
 	public static function build() {
 		var fields = Context.getBuildFields();
 
@@ -28,7 +31,7 @@ class Await {
 			switch (field.kind) {
 				case FFun(method): {
 					if (method.expr != null) {
-						method = Await.transform(method);
+						method = Await.transform(field, method);
 					}
 				}
 				default:
@@ -38,15 +41,18 @@ class Await {
 		return fields;
 	}
 
-	static function transform(method:haxe.macro.Function) {
-		var instance = new Await(method);
+	static function transform(field: Field, method: haxe.macro.Function) {
+		var instance = new Await(field, method);
 
 		method.expr = instance.handleRootExpr();
 
 		return method;
 	}
 
-	function new(method:haxe.macro.Function) {
+	function new(field: Field, method: haxe.macro.Function) {
+		this.field = field;
+		this.method = method;
+
 		this.rootExpr = method.expr;
 		this.currentExpr = this.rootExpr;
 
@@ -82,6 +88,9 @@ class Await {
 				}
 				case EFor(econd, expr): {
 					stack.push('For');
+				}
+				case EFunction(name, f): {
+					stack.push('Function');
 				}
 				case EMeta(s, e): {
 					stack.push('Meta');
@@ -127,11 +136,11 @@ class Await {
 
 	function isNestedTry() {
 		var exprs = this.getExprSummary(this.exprStack);
-		
+
 		if (exprs.lastIndexOf('Try') > exprs.indexOf('Try')) {
 			return true;
 		}
-		
+
 		return false;
 	}
 
@@ -141,7 +150,7 @@ class Await {
 		if (exprs.indexOf('Try') != -1) {
 			return true;
 		}
-		
+
 		return false;
 	}
 
@@ -151,7 +160,7 @@ class Await {
 		if (exprs.indexOf('Do') != -1) {
 			return true;
 		}
-		
+
 		return false;
 	}
 
@@ -161,7 +170,7 @@ class Await {
 		if (exprs.indexOf('While') != -1) {
 			return true;
 		}
-		
+
 		return false;
 	}
 
@@ -236,7 +245,7 @@ class Await {
 					if (e.expr != null) {
 						result = result.concat(this.findExprs(e, names, ignore));
 					}
-				}	
+				}
 			}
 			case ESwitch(e, cases, edef): {
 				if (ignore.indexOf('Switch') == -1) {
@@ -318,7 +327,7 @@ class Await {
 				}
 			}
 		}
-		
+
 		switch (expr.expr) {
 			case EBinop(op, e1, e2): {
 				this.handleBinop(op, e1, e2);
@@ -366,8 +375,38 @@ class Await {
 		}
 	}
 
-	function handleFunction(name, f) {
-		f = Await.transform(f);
+	function handleFunction(name: String, f: Function) {
+		var exprs = this.getExprSummary(this.exprStack),
+			i = exprs.length - 1,
+			metaExprs = [];
+
+		while (--i >= 0) {
+			if (exprs[i] == 'Meta')	{
+				switch (this.exprStack[i].expr) {
+					case EMeta(s, e): {
+						metaExprs.push(s);
+					}
+					default:
+				}
+			}
+			else break;
+		}
+
+		var field: Field = null;
+
+		// create a Field to pass to transform and include metadata if any
+		if (metaExprs.length > 0) {
+			field = {
+				pos: f.expr.pos,
+				name: name,
+				meta: metaExprs,
+				kind: FFun(f),
+				doc: null,
+				access: null
+			};
+		}
+
+		f = Await.transform(field, f);
 
 		this.appendExpr({expr: EFunction(name, f), pos: f.expr.pos});
 	}
@@ -377,7 +416,7 @@ class Await {
 			binopExpr = this.exprStack[exprs.lastIndexOf('Binop')],
 			varExpr = this.exprStack[exprs.lastIndexOf('Var')],
 			varName;
-		
+
 		if (binopExpr != null) {
 			switch (binopExpr.expr) {
 				case EBinop(op, {expr: EConst(CIdent(s))}, e2): {
@@ -399,7 +438,7 @@ class Await {
 
 		var currentBlock = this.currentBlock,
 			blocks = [];
-	
+
 		for (c in cases) {
 			var e = c.expr;
 
@@ -505,14 +544,14 @@ class Await {
 		var currentBlock = this.currentBlock,
 			controlExprs = [],
 			block;
-		
+
 		if (e != null) {
 			controlExprs = this.findExprs(e, ['Break', 'Continue'], ['For', 'While']);
 
 			var newBlock = [];
 
 			this.currentBlock = newBlock;
-		
+
 			this.handleExpr(e);
 
 			block = this.currentBlock;
@@ -564,12 +603,12 @@ class Await {
 			else {
 				var method = macro var __after_do = function () { $newBlockExpr; };
 
-				// async do 
+				// async do
 				expr = macro {
 					$method;
 
-					var __do = null; 
-					
+					var __do = null;
+
 					__do = function () {
 						$e;
 					};
@@ -595,7 +634,7 @@ class Await {
 			else {
 				block.push(macro { if ($econd) __do(); else __after_do(); });
 			}
-			
+
 			this.appendExpr(expr);
 
 			// shift current block to new "after if" callback
@@ -645,10 +684,11 @@ class Await {
 
 				this.appendExpr(macro var __iterator = $toIteratorExpr);
 
-				var expr = macro {
+				var expr;
+				expr = macro {
 					while ($hasNextExpr) {
-						var $name = $nextExpr;
-						$expr;
+					var $name = $nextExpr;
+					$expr;
 					}
 				};
 
@@ -661,7 +701,7 @@ class Await {
 					}
 				}
 			}
-			default: 
+			default:
 				this.appendExpr(this.currentExpr);
 		}
 	}
@@ -670,14 +710,14 @@ class Await {
 		var currentBlock = this.currentBlock,
 			isRootIf = this.isRootIf(),
 			blocks = [];
-		
+
 		if (eif != null) {
 			var newIfBlock = [];
 
 			this.currentBlock = newIfBlock;
 
 			this.handleExpr(eif, true);
-			
+
 			blocks.push(this.currentBlock);
 
 			eif.expr = EBlock(newIfBlock);
@@ -704,7 +744,7 @@ class Await {
 			this.handleExpr(eelse, true);
 
 			eelse.expr = EBlock(newElseBlock);
-		
+
 			if (isElse) {
 				blocks.push(this.currentBlock);
 			}
@@ -718,7 +758,7 @@ class Await {
 
 		// only add the "after if" callback if there was an async call made within the if statement
 		if (isCalled) {
-			if (isRootIf) {	
+			if (isRootIf) {
 				newBlock = [];
 
 				var newBlockExpr = {expr: EBlock(newBlock),	pos: econd.pos};
@@ -745,7 +785,7 @@ class Await {
 		}
 
 		this.appendExpr({expr: EIf(econd, eif, eelse), pos: econd.pos});
-		
+
 		// if there is a new block, change to it
 		if (newBlock != null) {
 			this.currentBlock = newBlock;
@@ -806,7 +846,7 @@ class Await {
 
 				var varName = c.name,
 					catchExpr = c.expr;
-			
+
 				var expr = macro {
 					if (Std.is(__exception, $i{exceptionType})) {
 						var $varName = __exception;
@@ -846,7 +886,7 @@ class Await {
 			else {
 				nextBlock.push(macro throw __exception);
 			}
-			
+
 			this.appendExpr({expr: EBlock(tryBlock), pos: e.pos});
 
 			block.push(macro __after_catch());
@@ -870,10 +910,10 @@ class Await {
 						this.handleMeta(s, e);
 					}
 					case EFunction(name, f): {
-						f = Await.transform(f);
+						f = Await.transform(null, f);
 
 						e2.expr = EFunction(name, f);
-						
+
 						this.appendExpr({expr: EBinop(op, e1, e2), pos: e2.pos});
 					}
 					case ESwitch(e, cases, edef): {
@@ -899,7 +939,7 @@ class Await {
 
 		for (v in vars) {
 			this.exprStack.push(macro EVar($i{v.name}));
-			
+
 			var expr = v.expr;
 
 			if (expr != null) {
@@ -910,10 +950,10 @@ class Await {
 						this.handleMeta(s, e);
 					}
 					case EFunction(name, f): {
-						f = Await.transform(f);
+						f = Await.transform(null, f);
 
 						v.expr = {expr: EFunction(name, f), pos: f.expr.pos};
-						
+
 						newVars.push(v);
 					}
 					case ESwitch(e, cases, edef): {
@@ -1023,7 +1063,7 @@ class Await {
 						return;
 					}
 
-					$newExprBlock; 
+					$newExprBlock;
 				};
 			}
 			else {
@@ -1033,7 +1073,7 @@ class Await {
 						return;
 					}
 
-					$newExprBlock; 
+					$newExprBlock;
 				};
 			}
 

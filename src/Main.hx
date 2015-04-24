@@ -1,46 +1,18 @@
 import macros.Await;
-import q.Q; 
 
-@:build(macros.Async.build())
 @:build(macros.Await.build())
 class Main {
 
 	static function main() {}
 
 	public static function foo(i: Int) {
-		try {
-			trace(1);
-
-			@await bar(i);
-
-			trace(2);
-
-			if (i == 1) {
-				var x = @pwait bar(i);
-
-				trace(x);
-			}
-
-			@fork for (i in 0...10) {
-				@await bar(i);
-			}
-
-			trace(1);
+		if (i == 2) {
+			var fn = function () {
+				return 1;
+			};
 		}
-		catch (e: String) {
-			trace(e);
-		}
-		
-		trace('after catching');
-	}
 
-	public static function bar(i: Int, ?__return) {
-		var defer = Q.defer();
-
-		return defer.promise;
+		//trace(a);
 	}
 
 }
-
-class Error {}
-class AnotherError {}
