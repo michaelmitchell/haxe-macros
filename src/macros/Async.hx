@@ -63,9 +63,11 @@ class Async {
 		this.rootBlock = [];
 		this.currentBlock = this.rootBlock;
 
-		for (m in field.meta) {
-			if (m.name == 'async') {
-				this.isAsync = true;
+		if (field != null) {
+			for (m in field.meta) {
+				if (m.name == 'async') {
+					this.isAsync = true;
+				}
 			}
 		}
 
@@ -362,7 +364,7 @@ class Async {
 		if (this.isAsync && !this.isReturned) {
 			this.appendExpr(macro {
 				__return(null, null);
-				return null;
+				return;
 			});
 		}
 
@@ -448,7 +450,7 @@ class Async {
 			if (!this.isReturned) {
 				this.appendExpr(macro {
 					__return($e, null);
-					return null;
+					return;
 				});
 
 				this.isReturned = true;
@@ -467,7 +469,7 @@ class Async {
 			if (!this.isReturned) {
 				this.appendExpr(macro {
 					__return(null, $e);
-					return $e;
+					return;
 				});
 
 				this.isReturned = true;
@@ -559,12 +561,14 @@ class Async {
 					var lastExpr;
 
 					switch (e.expr) {
-						case EBlock([{expr: EBlock(exprs)}]):
+						case EBlock([{expr: EBlock(exprs)}]): {
 							lastExpr = exprs.splice(exprs.length - 1, 1)[0];
 							block = exprs;
-						case EBlock(exprs):
+						}
+						case EBlock(exprs): {
 							lastExpr = exprs.splice(exprs.length - 1, 1)[0];
 							block = exprs;
+						}
 						default:
 					}
 
@@ -593,12 +597,14 @@ class Async {
 				var lastExpr;
 
 				switch (edef.expr) {
-					case EBlock([{expr: EBlock(exprs)}]):
+					case EBlock([{expr: EBlock(exprs)}]): {
 						lastExpr = exprs.splice(exprs.length - 1, 1)[0];
 						block = exprs;
-					case EBlock(exprs):
+					}
+					case EBlock(exprs): {
 						lastExpr = exprs.splice(exprs.length - 1, 1)[0];
 						block = exprs;
+					}
 					default:
 				}
 
@@ -642,7 +648,7 @@ class Async {
 			for (block in blocks) {
 				block.push(macro {
 					__after_switch();
-					return null;
+					return;
 				});
 			}
 		}
@@ -699,8 +705,9 @@ class Async {
 								$e;
 								__while();
 							}
-							return null;
 						}
+
+						__while();
 					};
 				}
 				else {
@@ -720,6 +727,8 @@ class Async {
 								__after_while();
 							}
 						}
+
+						__while();
 					};
 				}
 
@@ -732,7 +741,7 @@ class Async {
 							else {
 								macro {
 									__after_while();
-									return null;
+									return;
 								};
 							}
 						}
@@ -743,7 +752,7 @@ class Async {
 							else {
 								macro {
 									__while();
-									return null;
+									return;
 								};
 							}
 						}
@@ -772,8 +781,9 @@ class Async {
 							if ($econd) {
 								__do();
 							}
-							return null;
 						};
+
+						__do();
 					}
 				}
 				else {
@@ -787,8 +797,9 @@ class Async {
 
 						__do = function () {
 							$e;
-							return null;
 						};
+
+						__do();
 					}
 				}
 
@@ -801,7 +812,7 @@ class Async {
 							else {
 								macro {
 									__after_do();
-									return null;
+									return;
 								};
 							}
 						}
@@ -817,7 +828,7 @@ class Async {
 									else {
 										__after_do();
 									}
-									return null;
+									return;
 								};
 							}
 						}
@@ -836,13 +847,13 @@ class Async {
 						if (--__counter == 0) {
 							__after_while();
 						}
-						return null;
+						return;
 					});
 				}
 				else {
 					block.push(macro {
 						__while();
-						return null;
+						return;
 					});
 				}
 			}
@@ -852,18 +863,18 @@ class Async {
 						if (--__counter == 0) {
 							__after_do();
 						}
-						return null;
+						return;
 					});
 				}
 				else {
 					block.push(macro {
 						if ($econd) {
 							__do();
-							return null;
+							return;
 						}
 						else {
 							__after_do();
-							return null;
+							return;
 						}
 					});
 				}
@@ -1120,7 +1131,7 @@ class Async {
 					case EThrow(e): {
 						macro {
 							__catch($e);
-							return null;
+							return;
 						};
 					}
 					default: {
@@ -1323,7 +1334,7 @@ class Async {
 				method = macro function(__error, __result) {
 					if (__error != null) {
 						__catch(__error);
-						return null;
+						return;
 					}
 
 					$newExprBlock;
@@ -1333,7 +1344,7 @@ class Async {
 				method = macro function(__error, __result) {
 					if (__error != null) {
 						__return(__error, null);
-						return null;
+						return;
 					}
 
 					$newExprBlock;
@@ -1343,7 +1354,6 @@ class Async {
 				method = macro function(__error, __result) {
 					if (__error != null) {
 						throw __error;
-						return null;
 					}
 
 					$newExprBlock;
@@ -1365,9 +1375,9 @@ class Async {
 			else if (this.isAsync) {
 				metaExpr = macro {
 					$metaExpr.then(function (__result) {
-					$newExprBlock;
+						$newExprBlock;
 					}, function (__error) {
-					__return(__error, null);
+						__return(__error, null);
 					});
 				};
 			}
