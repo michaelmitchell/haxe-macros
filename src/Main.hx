@@ -1,25 +1,22 @@
-import macros.Await;
+import macros.Async;
 
-@:build(macros.Await.build())
+@:build(macros.Async.build())
 class Main {
 
 	static function main() {}
 
-	@async public static function foo(i: Int) {
-		try {
-			var x = @await bar(1);
+	public static function foo(i: Int) {
+		i = @await bar(i);
 
-			if (i == 2) {
-				throw "error";
-			}
-
-			return x;
+		if (i == 2) {
+			throw "error";
 		}
-		catch (e: String) {
-			trace(e);
 
-			throw e;
+		if (i == 3) {
+			throw "error";
 		}
+
+		return -1;
 	}
 
 	@async public static function bar(i: Int) {
