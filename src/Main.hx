@@ -5,15 +5,12 @@ class Main {
 
 	static function main() {}
 
-	public static function foo(i: Int) {
-		i = @await bar(i);
-
-		if (i == 2) {
-			throw "error";
-		}
-
+	@async public static function foo(i: Int): Int {
 		if (i == 3) {
 			throw "error";
+		}
+		else if (i == 4) {
+			throw Main;
 		}
 
 		return -1;

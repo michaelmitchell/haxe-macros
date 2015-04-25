@@ -72,18 +72,14 @@ class Async {
 		if (this.isAsync) {
 			// cache return type to apply to callback value
 			var returnType: ComplexType = method.ret;
-
-			//remove return type requirement
-			this.method.ret = null;
-
 			var type: ComplexType = null;
 
 			// apply return type to callback function for type checking
 			if (returnType != null) {
 				type = TFunction([
-					TPath({name: null, pack: []}),
+					TPath({name: 'Dynamic', pack: [], params: []}),
 					returnType
-				], TPath({name: 'Void', pack: []}));
+				], TPath({name: 'Void', pack: [], params: []}));
 			}
 
 			// add callback to method as last argument
@@ -461,12 +457,13 @@ class Async {
 			this.appendExpr(this.currentExpr);
 		}
 	}
+
 	function handleReturn(e) {
 		if (this.isAsync) {
 			if (!this.isReturned) {
 				this.appendExpr(macro {
 					__return(null, $e);
-					return null;
+					return $e;
 				});
 
 				this.isReturned = true;
