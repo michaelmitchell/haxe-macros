@@ -70,7 +70,6 @@ class Async {
 		}
 
 		if (this.isAsync) {
-			// cache return type to apply to callback value
 			var returnType: ComplexType = method.ret;
 			var type: ComplexType = null;
 
@@ -172,9 +171,9 @@ class Async {
 	}
 
 	function isNestedTry() {
-		var exprs = this.getExprSummary(this.exprStack);
+		var exprSummary = this.getExprSummary(this.exprStack);
 
-		if (exprs.lastIndexOf('Try') > exprs.indexOf('Try')) {
+		if (exprSummary.lastIndexOf('Try') > exprSummary.indexOf('Try')) {
 			return true;
 		}
 
@@ -182,9 +181,9 @@ class Async {
 	}
 
 	function isInTry() {
-		var exprs = this.getExprSummary(this.exprStack);
+		var exprSummary = this.getExprSummary(this.exprStack);
 
-		if (exprs.indexOf('Try') != -1) {
+		if (exprSummary.indexOf('Try') != -1) {
 			return true;
 		}
 
@@ -192,9 +191,9 @@ class Async {
 	}
 
 	function isInCatch() {
-		var exprs = this.getExprSummary(this.exprStack);
+		var exprSummary = this.getExprSummary(this.exprStack);
 
-		if (exprs.indexOf('Catch') != -1) {
+		if (exprSummary.indexOf('Catch') != -1) {
 			return true;
 		}
 
@@ -202,9 +201,9 @@ class Async {
 	}
 
 	function isInDo() {
-		var exprs = this.getExprSummary(this.exprStack);
+		var exprSummary = this.getExprSummary(this.exprStack);
 
-		if (exprs.indexOf('Do') != -1) {
+		if (exprSummary.indexOf('Do') != -1) {
 			return true;
 		}
 
@@ -212,9 +211,9 @@ class Async {
 	}
 
 	function isInWhile() {
-		var exprs = this.getExprSummary(this.exprStack);
+		var exprSummary = this.getExprSummary(this.exprStack);
 
-		if (exprs.indexOf('While') != -1) {
+		if (exprSummary.indexOf('While') != -1) {
 			return true;
 		}
 
@@ -238,16 +237,18 @@ class Async {
 	}
 
 	function findExprs(ein: Expr, names: Array<String>, ?ignore: Array<String>) {
-		var result = [];
-
 		if (ignore == null) {
 			ignore = [];
 		}
 
+		var result = [];
+
 		switch(ein.expr) {
 			case EBlock(exprs): {
 				for (expr in exprs) {
-					result = result.concat(this.findExprs(expr, names, ignore));
+					if (expr != null) {
+						result = result.concat(this.findExprs(expr, names, ignore));
+					}
 				}
 			}
 			case EBreak: {
@@ -339,12 +340,12 @@ class Async {
 	}
 
 	function handleRootExpr() {
-		var expr = this.rootExpr;
+		var rootExpr = this.rootExpr;
 
-		this.currentExpr = expr;
+		this.currentExpr = rootExpr;
 
 		// first expr should be block
-		switch (expr.expr) {
+		switch (rootExpr.expr) {
 			case EBlock(exprs): {
 				for (expr in exprs) {
 					this.callStack = [];
@@ -354,7 +355,7 @@ class Async {
 				}
 			}
 			default: {
-				this.appendExpr(expr);
+				this.appendExpr(rootExpr);
 			}
 		}
 
@@ -365,7 +366,10 @@ class Async {
 			});
 		}
 
-		var newExpr = {expr: EBlock(this.rootBlock), pos: expr.pos};
+		var newExpr = {
+			expr: EBlock(this.rootBlock),
+			pos: rootExpr.pos
+		};
 
 		return newExpr;
 	}
@@ -440,9 +444,9 @@ class Async {
 	}
 
 	function handleThrow(e) {
-		if (this.isAsync && !this.isInTry() || this.isInCatch()) {
+		if (this.isAsync && (!this.isInTry() || this.isInCatch())) {
 			if (!this.isReturned) {
-				this.appendExpr(macro{
+				this.appendExpr(macro {
 					__return($e, null);
 					return null;
 				});
@@ -478,12 +482,13 @@ class Async {
 	}
 
 	function handleFunction(name: String, f: Function) {
-		var exprs = this.getExprSummary(this.exprStack),
-			i = exprs.length - 1,
-			metaExprs = [];
+		var exprSummary = this.getExprSummary(this.exprStack);
+		var	i = exprSummary.length - 1;
+		var	metaExprs = [];
 
+		// get metadata for nested function
 		while (--i >= 0) {
-			if (exprs[i] == 'Meta')	{
+			if (exprSummary[i] == 'Meta')	{
 				switch (this.exprStack[i].expr) {
 					case EMeta(s, e): {
 						metaExprs.push(s);
@@ -514,10 +519,10 @@ class Async {
 	}
 
 	function handleSwitch(e: Expr, cases: Array<Case>, edef) {
-		var exprs = this.getExprSummary(this.exprStack),
-			binopExpr = this.exprStack[exprs.lastIndexOf('Binop')],
-			varExpr = this.exprStack[exprs.lastIndexOf('Var')],
-			varName;
+		var exprSummary = this.getExprSummary(this.exprStack);
+		var binopExpr = this.exprStack[exprSummary.lastIndexOf('Binop')];
+		var varExpr = this.exprStack[exprSummary.lastIndexOf('Var')];
+		var varName;
 
 		if (binopExpr != null) {
 			switch (binopExpr.expr) {
@@ -529,7 +534,7 @@ class Async {
 		}
 		else if (varExpr != null) {
 			switch (varExpr.expr) {
-				case ECall({ expr: EConst(CIdent('EVar')) }, [{ expr: EConst(CIdent(s)) }]): {
+				case ECall({expr: EConst(CIdent('EVar')) }, [{ expr: EConst(CIdent(s)) }]): {
 					varName = s;
 
 					this.appendExpr(Context.parse('var ' + s, e.pos));
@@ -538,8 +543,8 @@ class Async {
 			}
 		}
 
-		var currentBlock = this.currentBlock,
-			blocks = [];
+		var currentBlock = this.currentBlock;
+		var blocks = [];
 
 		for (c in cases) {
 			var e = c.expr;
@@ -550,8 +555,8 @@ class Async {
 				this.currentBlock = newBlock;
 
 				if (varName != null) {
-					var block = [],
-						lastExpr;
+					var block = [];
+					var lastExpr;
 
 					switch (e.expr) {
 						case EBlock([{expr: EBlock(exprs)}]):
@@ -563,7 +568,9 @@ class Async {
 						default:
 					}
 
-					lastExpr = macro { $i{varName} = $lastExpr; };
+					lastExpr = macro {
+						$i{varName} = $lastExpr;
+					};
 
 					block.push(lastExpr);
 				}
@@ -576,14 +583,14 @@ class Async {
 			}
 		}
 
-		if (edef != null) {
+		if (edef != null && edef.expr != null) {
 			var newBlock = [];
 
 			this.currentBlock = newBlock;
 
 			if (varName != null) {
-				var block = [],
-					lastExpr;
+				var block = [];
+				var lastExpr;
 
 				switch (edef.expr) {
 					case EBlock([{expr: EBlock(exprs)}]):
@@ -595,7 +602,9 @@ class Async {
 					default:
 				}
 
-				lastExpr = macro { $i{varName} = $lastExpr; };
+				lastExpr = macro {
+					$i{varName} = $lastExpr;
+				};
 
 				block.push(lastExpr);
 			}
@@ -609,8 +618,8 @@ class Async {
 
 		this.currentBlock = currentBlock;
 
-		var isCalled = this.isCalled('Switch'),
-			newBlock;
+		var isCalled = this.isCalled('Switch');
+		var newBlock;
 
 		if (isCalled) {
 			newBlock = [];
@@ -631,7 +640,10 @@ class Async {
 			}
 
 			for (block in blocks) {
-				block.push(macro __after_switch());
+				block.push(macro {
+					__after_switch();
+					return null;
+				});
 			}
 		}
 
@@ -642,10 +654,10 @@ class Async {
 		}
 	}
 
-	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool, ?isFork = false) {
-		var currentBlock = this.currentBlock,
-			controlExprs = [],
-			block;
+	function handleWhile(econd: Expr, e: Expr, normalWhile:  Bool, ?isFork: Bool = false) {
+		var currentBlock = this.currentBlock;
+		var controlExprs = [];
+		var block;
 
 		if (e != null) {
 			controlExprs = this.findExprs(e, ['Break', 'Continue'], ['For', 'While']);
@@ -666,78 +678,148 @@ class Async {
 		var isCalled = this.isCalled(normalWhile ? 'While' : 'Do');
 
 		if (isCalled) {
-			var newBlock = [],
-				newBlockExpr = {expr: EBlock(newBlock),	pos: econd.pos},
-				expr;
+			var newBlock = [];
+			var newBlockExpr = {expr: EBlock(newBlock),	pos: econd.pos};
+			var expr;
 
 			if (normalWhile) {
-				var method = macro var __after_while = function () { $newBlockExpr; };
+				if (isFork) {
+					//async forked while
+					expr = macro {
+						var __after_while = function () {
+							$newBlockExpr;
+						};
 
-				//async while
-				expr = macro {
-					$method;
+						var __counter = 0;
+						var __while = null;
 
-					var __while = null;
-
-					__while = function () {
-						if ($econd) {
-							$e;
-						}
-						else {
-							__after_while();
-						}
-					}
-				};
-
-				for (expr in controlExprs) {
-					var newExpr = switch (expr.expr) {
-						case EBreak:{
-							macro {
-								__after_while();
-								return null;
-							};
-						}
-						case EContinue: {
-							macro {
+						__while = function () {
+							if ($econd) {
+								__counter++;
+								$e;
 								__while();
-								return null;
-							};
+							}
+							return null;
 						}
-						default: {
-							expr;
-						}
-					}
-
-					expr.expr = newExpr.expr;
+					};
 				}
-			}
-			else {
-				var method = macro var __after_do = function () { $newBlockExpr; };
+				else {
+					//async series while
+					expr = macro {
+						var __after_while = function () {
+							$newBlockExpr;
+						};
 
-				// async do
-				expr = macro {
-					$method;
+						var __while = null;
 
-					var __do = null;
-
-					__do = function () {
-						$e;
+						__while = function () {
+							if ($econd) {
+								$e;
+							}
+							else {
+								__after_while();
+							}
+						}
 					};
 				}
 
 				for (expr in controlExprs) {
 					var newExpr = switch (expr.expr) {
-						case EBreak: {
-							macro {
-								__after_do();
-								return null;
-							};
+						case EBreak:{
+							if (isFork) {
+								Context.error('Cannot use break inside fork.', e.pos);
+							}
+							else {
+								macro {
+									__after_while();
+									return null;
+								};
+							}
 						}
 						case EContinue: {
-							macro {
-								if ($econd) __do();	else __after_do();
-								return null;
-							};
+							if (isFork) {
+								Context.error('Cannot use continue inside fork.', e.pos);
+							}
+							else {
+								macro {
+									__while();
+									return null;
+								};
+							}
+						}
+						default: {
+							expr;
+						}
+					}
+
+					expr.expr = newExpr.expr;
+				}
+			}
+			else {
+				if (isFork) {
+					// async series do
+					expr = macro {
+						var __after_do = function () {
+							$newBlockExpr;
+						};
+
+						var __counter = 0;
+						var __do = null;
+
+						__do = function () {
+							__counter++;
+							$e;
+							if ($econd) {
+								__do();
+							}
+							return null;
+						};
+					}
+				}
+				else {
+					// async series do
+					expr = macro {
+						var __after_do = function () {
+							$newBlockExpr;
+						};
+
+						var __do = null;
+
+						__do = function () {
+							$e;
+							return null;
+						};
+					}
+				}
+
+				for (expr in controlExprs) {
+					var newExpr = switch (expr.expr) {
+						case EBreak: {
+							if (isFork) {
+								Context.error('Cannot use break inside fork.', e.pos);
+							}
+							else {
+								macro {
+									__after_do();
+									return null;
+								};
+							}
+						}
+						case EContinue: {
+							if (isFork) {
+								Context.error('Cannot use continue inside fork.', e.pos);
+							}
+							else {
+								macro {
+									if ($econd) {
+										__do();
+									}
+									else {
+										__after_do();
+									}
+									return null;
+								};
+							}
 						}
 						default: {
 							expr;
@@ -749,10 +831,42 @@ class Async {
 			}
 
 			if (normalWhile) {
-				block.push(macro __while());
+				if (isFork) {
+					block.push(macro {
+						if (--__counter == 0) {
+							__after_while();
+						}
+						return null;
+					});
+				}
+				else {
+					block.push(macro {
+						__while();
+						return null;
+					});
+				}
 			}
 			else {
-				block.push(macro { if ($econd) __do(); else __after_do(); });
+				if (isFork) {
+					block.push(macro {
+						if (--__counter == 0) {
+							__after_do();
+						}
+						return null;
+					});
+				}
+				else {
+					block.push(macro {
+						if ($econd) {
+							__do();
+							return null;
+						}
+						else {
+							__after_do();
+							return null;
+						}
+					});
+				}
 			}
 
 			this.appendExpr(expr);
@@ -768,7 +882,7 @@ class Async {
 		}
 	}
 
-	function handleFor(it, expr, ?isFork = false) {
+	function handleFor(it, expr, ?isFork: Bool = false) {
 		switch(it.expr) {
 			case EIn(e1, e2): {
 				var name = switch (e1.expr) {
@@ -804,15 +918,14 @@ class Async {
 
 				this.appendExpr(macro var __iterator = $toIteratorExpr);
 
-				var expr;
-				expr = macro {
+				var newExpr = macro {
 					while ($hasNextExpr) {
-					var $name = $nextExpr;
-					$expr;
+						var $name = $nextExpr;
+						$expr;
 					}
 				};
 
-				switch (expr.expr) {
+				switch (newExpr.expr) {
 					case EBlock([{expr: EWhile(econd, e, normalWhile)}]): {
 						this.handleWhile(econd, e, normalWhile, isFork);
 					}
@@ -821,15 +934,16 @@ class Async {
 					}
 				}
 			}
-			default:
+			default: {
 				this.appendExpr(this.currentExpr);
+			}
 		}
 	}
 
 	function handleIf(econd: Expr, eif: Expr, eelse: Null<Expr>) {
-		var currentBlock = this.currentBlock,
-			isRootIf = this.isRootIf(),
-			blocks = [];
+		var currentBlock = this.currentBlock;
+		var isRootIf = this.isRootIf();
+		var blocks = [];
 
 		if (eif != null) {
 			var newIfBlock = [];
@@ -844,8 +958,8 @@ class Async {
 		}
 
 		if (eelse != null) {
-			var newElseBlock = [],
-				isElse = false;
+			var newElseBlock = [];
+			var isElse = false;
 
 			this.currentBlock = newElseBlock;
 
@@ -873,8 +987,8 @@ class Async {
 		// switch back to previous block
 		this.currentBlock = currentBlock;
 
-		var isCalled = this.isCalled('If'),
-			newBlock;
+		var isCalled = this.isCalled('If');
+		var newBlock;
 
 		// only add the "after if" callback if there was an async call made within the if statement
 		if (isCalled) {
@@ -913,9 +1027,10 @@ class Async {
 	}
 
 	function handleTry(e, catches: Array<Catch>) {
-		var currentBlock = this.currentBlock,
-			tryBlock = [],
-			controlExprs, block;
+		var currentBlock = this.currentBlock;
+		var tryBlock = [];
+		var controlExprs;
+		var block;
 
 		if (e != null) {
 			controlExprs = this.findExprs(e, ['Throw']);
@@ -930,8 +1045,7 @@ class Async {
 		}
 
 		for (c in catches) {
-			var e = c.expr,
-				throwInCatch = this.findExprs(e, ['Throw']);
+			var e = c.expr;
 
 			if (e != null) {
 				var newBlock = [];
@@ -952,14 +1066,23 @@ class Async {
 		var isCalled = this.isCalled('Try');
 
 		if (isCalled || this.isAsync) {
-			var newBlock = [],
-				newBlockExpr = {expr: EBlock(newBlock),	pos: e.pos};
+			var newBlock = [];
+
+			var newBlockExpr = {
+				expr: EBlock(newBlock),
+				pos: e.pos
+			};
 
 			this.appendExpr(macro var __after_catch = function () { $newBlockExpr; });
 
-			var catchBlock = [],
-				catchBlockExpr = {expr: EBlock(catchBlock), pos: e.pos},
-				nextBlock = catchBlock;
+			var catchBlock = [];
+
+			var catchBlockExpr = {
+				expr: EBlock(catchBlock),
+				pos: e.pos
+			};
+
+			var nextBlock = catchBlock;
 
 			for (c in catches) {
 				var exceptionType = switch (c.type) {
@@ -967,8 +1090,8 @@ class Async {
 					default: null;
 				}
 
-				var varName = c.name,
-					catchExpr = c.expr;
+				var varName = c.name;
+				var catchExpr = c.expr;
 
 				var expr = macro {
 					if (Std.is(__exception, $i{exceptionType})) {
@@ -1067,8 +1190,8 @@ class Async {
 	}
 
 	function handleVars(vars:Array<Var>) {
-		var newVars = [],
-			newBlock;
+		var newVars = [];
+		var newBlock;
 
 		for (v in vars) {
 			this.exprStack.push(macro EVar($i{v.name}));
@@ -1133,6 +1256,9 @@ class Async {
 				case EFor(it, expr): {
 					this.handleFor(it, expr, true);
 				}
+				case EWhile(econd, e, normalWhile): {
+					this.handleWhile(econd, e, normalWhile, true);
+				}
 				default: {
 					Context.error('Invalid use of fork', e.pos);
 				}
@@ -1146,25 +1272,24 @@ class Async {
 	}
 
 	function handleCall(ce, p, ?isPromise = false) {
-		var exprs = this.getExprSummary(this.exprStack),
-			metaExpr = this.exprStack[exprs.lastIndexOf('Meta')];
+		var exprSummary = this.getExprSummary(this.exprStack);
+		var metaExpr = this.exprStack[exprSummary.lastIndexOf('Meta')];
 
-		var binopIdx = exprs.lastIndexOf('Binop'),
-			binopExpr;
+		var binopIdx = exprSummary.lastIndexOf('Binop');
+		var binopExpr;
 
 		// binop and var should be exactly 2 behind otherwise the last was from something else...
-		if (binopIdx == exprs.length - 3) {
+		if (binopIdx == exprSummary.length - 3) {
 			binopExpr = this.exprStack[binopIdx];
 		}
 
-		var varIdx = exprs.lastIndexOf('Var'),
-			varExpr;
+		var varIdx = exprSummary.lastIndexOf('Var');
+		var varExpr;
+		var name;
 
-		if (varIdx == exprs.length - 3) {
+		if (varIdx == exprSummary.length - 3) {
 			varExpr = this.exprStack[varIdx];
 		}
-
-		var name;
 
 		//work out the name of assignment if any
 		if (binopExpr != null) {
@@ -1184,9 +1309,14 @@ class Async {
 			}
 		}
 
-		var newBlock = [],
-			newExprBlock = {expr: EBlock(newBlock), pos: ce.pos},
-			method;
+		var newBlock = [];
+
+		var newExprBlock = {
+			expr: EBlock(newBlock),
+			pos: ce.pos
+		};
+
+		var method;
 
 		if (!isPromise) {
 			if (this.isInTry()) {
@@ -1259,7 +1389,10 @@ class Async {
 			newBlock.push(opAssign);
 		}
 
-		this.appendExpr({expr: EBlock([metaExpr]), pos: ce.pos});
+		this.appendExpr({
+			expr: EBlock([metaExpr]),
+			pos: ce.pos
+		});
 
 		this.currentBlock = newBlock;
 	}

@@ -5,12 +5,9 @@ class Main {
 
 	static function main() {}
 
-	@async public static function foo(i: Int): Int {
-		if (i == 3) {
-			throw "error";
-		}
-		else if (i == 4) {
-			throw Main;
+	public static function foo(i: Int) {
+		while (i > 0) {
+			@await bar(i);
 		}
 
 		return -1;
