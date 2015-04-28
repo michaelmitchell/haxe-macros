@@ -1,10 +1,29 @@
+package ;
+
+import com.sencha.extjs.Ext;
+import com.sencha.extjs.ExtClass;
+
+import extjs.ExtTest;
 import macros.Async;
+
 
 @:build(macros.Async.build())
 class Main {
 
 	static function main() {
 		@await foo(1);
+
+		Ext.onReady(function () {
+			var panel = new ExtTest({
+				renderTo: Ext.getBody(),
+				width: 640,
+				height: 480,
+				bodyPadding: 5,
+				html : 'Hello <b>World</b>...'
+			});
+
+			trace(panel);
+		});
 	}
 
 	@async public static function foo(i: Int) {
