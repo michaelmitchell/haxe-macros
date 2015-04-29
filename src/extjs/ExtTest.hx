@@ -1,12 +1,10 @@
 package extjs;
 
-import com.sencha.extjs.ExtClass;
 import com.sencha.extjs.panel.Panel;
+import macros.async.AsyncMethods;
+import macros.sencha.ExtClass;
 
-import macros.ExtJS;
-
-@:build(macros.ExtJS.build())
-class ExtTest extends Panel {
+class ExtTest extends Panel implements ExtClass implements AsyncMethods {
 
 	var config = {
 		name: null
@@ -16,7 +14,7 @@ class ExtTest extends Panel {
 		mymixin: MyMixin
 	};
 
-	public function new(options) {
+	public function new(?options) {
 		super(options);
 
 		ExtTest.extend();

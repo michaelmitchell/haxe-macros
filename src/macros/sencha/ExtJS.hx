@@ -95,13 +95,13 @@ class ExtJS {
 				mixins: $mixins
 			};
 
-			ExtClass.create($i{className}, __config);
+			com.sencha.extjs.ExtClass.create($i{className}, __config);
 
 			// override exts extend functionality in favour of haxes
 			$i{className}.extend = function() {};
 			$i{className}.triggerExtended = function () {};
 
-			ExtClass.process($i{className}, __config);
+			com.sencha.extjs.ExtClass.process($i{className}, __config);
 		};
 
 		if (initField == null) {

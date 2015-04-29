@@ -913,17 +913,17 @@ class Async {
 				}
 
 				var toIteratorExpr = {
-					expr: ECall(macro macros.Async.toIterator, [e2]),
+					expr: ECall(macro macros.async.Async.toIterator, [e2]),
 					pos: it.pos
 				};
 
 				var hasNextExpr = {
-					expr: ECall(macro macros.Async.hasNext, [e2]),
+					expr: ECall(macro macros.async.Async.hasNext, [e2]),
 					pos: it.pos
 				};
 
 				var nextExpr = {
-					expr: ECall(macro macros.Async.next, [e2]),
+					expr: ECall(macro macros.async.Async.next, [e2]),
 					pos: it.pos
 				};
 

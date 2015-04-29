@@ -1,14 +1,10 @@
 package ;
 
 import com.sencha.extjs.Ext;
-import com.sencha.extjs.ExtClass;
-
 import extjs.ExtTest;
-import macros.Async;
+import macros.async.AsyncMethods;
 
-
-@:build(macros.Async.build())
-class Main {
+class Main implements AsyncMethods {
 
 	static function main() {
 		@await foo(1);
@@ -24,6 +20,8 @@ class Main {
 
 			trace(panel);
 		});
+
+
 	}
 
 	@async public static function foo(i: Int) {
