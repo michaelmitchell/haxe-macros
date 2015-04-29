@@ -7,4 +7,6 @@ extern class Panel {
 
 	public function new(options: Dynamic): Void;
 
+	public function on(eventName: String, method: Dynamic): Void;
+
 }

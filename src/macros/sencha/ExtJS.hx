@@ -121,6 +121,8 @@ class ExtJS {
 				doc: null,
 				access: [AStatic]
 			};
+
+			fields.push(initField);
 		}
 		else {
 			// add init expr to start of existing init function
@@ -132,7 +134,90 @@ class ExtJS {
 			}
 		}
 
-		fields.push(initField);
+		return fields;
+	}
+
+	public static function buildEvents() {
+		var fields = Context.getBuildFields();
+		var newField;
+		var events = [];
+
+		for (field in fields) {
+			switch (field.kind) {
+				case FFun(method): {
+					if (field.name == 'new') {
+						newField = field;
+					}
+					else {
+						for (m in field.meta) {
+							if (m.name == 'on') {
+								switch (m.params[0].expr) {
+									case EConst(CString(s)): {
+										events.push({
+											method: field.name,
+											name: s
+										});
+									}
+									default:
+								}
+							}
+						}
+					}
+				}
+				default:
+			}
+		}
+
+		var pos = Context.currentPos();
+		var block = [];
+		var blockExpr = {expr: EBlock(block), pos: pos};
+
+		for (event in events) {
+			var name = event.name;
+			var method = event.method;
+
+			block.push(macro this.on('${name}', this.$method));
+		}
+
+		if (newField == null) {
+			// create an init expr if it does not already exist
+			newField = {
+				pos: pos,
+				name: 'new',
+				meta: [],
+				kind: FFun({
+					args: [{
+						name: 'config',
+						type: null,
+						opt: true,
+						value: null
+					}],
+					expr: macro {
+						super(config);
+
+						$blockExpr;
+					},
+					params: [],
+					ret: TPath({
+						name: 'Void',
+						pack: [],
+						params: []
+					})
+				}),
+				doc: null,
+				access: [APublic]
+			};
+
+			fields.push(newField);
+		}
+		else {
+			switch (newField.kind) {
+				case FFun({expr: {expr: EBlock(exprs)}}): {
+					exprs.push(blockExpr);
+				}
+				default:
+			}
+		}
 
 		return fields;
 	}

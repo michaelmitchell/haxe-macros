@@ -4,30 +4,15 @@ import com.sencha.extjs.panel.Panel;
 
 class ExtTest extends Panel
 	implements macros.sencha.Class
+	implements macros.sencha.Events
 	implements macros.async.Methods {
 
-	var config = {
-		name: null
-	};
+	@on('afterrender') function onAfterRender() {
 
-	var mixins = {
-		mymixin: MyMixin
-	};
-
-	public function new(?options) {
-		super(options);
-
-		ExtTest.extend();
-
-		trace(this.mixins);
 	}
 
-}
-
-class MyMixin {
-
-	public function doMixinStuff() {
-		trace('I am a mixed in function');
+	@async function foo(i) {
+		return i;
 	}
 
 }
