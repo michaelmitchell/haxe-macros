@@ -2,9 +2,8 @@ package ;
 
 import com.sencha.extjs.Ext;
 import extjs.ExtTest;
-import macros.async.AsyncMethods;
 
-class Main implements AsyncMethods {
+class Main implements macros.async.Methods {
 
 	static function main() {
 		@await foo(1);

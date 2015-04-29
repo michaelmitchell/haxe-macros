@@ -1,10 +1,10 @@
 package extjs;
 
 import com.sencha.extjs.panel.Panel;
-import macros.async.AsyncMethods;
-import macros.sencha.ExtClass;
 
-class ExtTest extends Panel implements ExtClass implements AsyncMethods {
+class ExtTest extends Panel
+	implements macros.sencha.Class
+	implements macros.async.Methods {
 
 	var config = {
 		name: null

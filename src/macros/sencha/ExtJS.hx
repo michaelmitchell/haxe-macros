@@ -1,7 +1,5 @@
 package macros.sencha;
 
-import com.sencha.extjs.ExtClass;
-
 #if macro
 import haxe.macro.Context;
 import haxe.macro.Expr;
@@ -9,7 +7,7 @@ import haxe.macro.Expr;
 
 class ExtJS {
 	#if macro
-	public static function build() {
+	public static function buildClass() {
 		var fields = Context.getBuildFields();
 
 		var config = macro null;
