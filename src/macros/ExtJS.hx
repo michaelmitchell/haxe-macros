@@ -105,6 +105,7 @@ class ExtJS {
 		};
 
 		if (initField == null) {
+			// create an init expr if it does not already exist
 			initField = {
 				pos: pos,
 				name: '__init__',
@@ -122,6 +123,15 @@ class ExtJS {
 				doc: null,
 				access: [AStatic]
 			};
+		}
+		else {
+			// add init expr to start of existing init function
+			switch (initField.kind) {
+				case FFun({expr: {expr: EBlock(exprs)}}): {
+					exprs.unshift(initExpr);
+				}
+				default:
+			}
 		}
 
 		fields.push(initField);

@@ -16,12 +16,6 @@ class ExtTest extends Panel {
 		mymixin: MyMixin
 	};
 
-	static function __init__() : Void {
-		trace('banana');
-
-		trace(ExtTest);
-	}
-
 	public function new(options) {
 		super(options);
 
