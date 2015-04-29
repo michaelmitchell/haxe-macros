@@ -11,7 +11,7 @@ class ExtTest extends Panel
 
 	}
 
-	@async function foo(i) {
+	@on('beforerender') @async function foo(i) {
 		return i;
 	}
 
