@@ -1,4 +1,4 @@
-package macros;
+package macros.sencha;
 
 import com.sencha.extjs.ExtClass;
 

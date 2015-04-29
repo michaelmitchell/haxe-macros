@@ -1,4 +1,4 @@
-package macros;
+package macros.async;
 
 #if macro
 import haxe.macro.Context;
